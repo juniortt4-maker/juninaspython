@@ -14,6 +14,24 @@ st.set_page_config(
 
 st.title("🚔 OPERAÇÃO - SÃO JOÃO 2026")
 
+st.markdown("""
+<style>
+    .stApp {
+        background: #0B0F14;
+    }
+
+    h1, h2, h3 {
+        color: #E5E7EB;
+        letter-spacing: -0.2px;
+    }
+
+    .stCaption {
+        color: #94A3B8 !important;
+        font-size: 0.88rem !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 url = (
     "https://docs.google.com/spreadsheets/d/"
     "1qQrvomIDols1qLFsziiCP2BZtXLRXpjsErXKqONTsVE/"
@@ -81,7 +99,7 @@ def converter_numero_misto(valor):
     else:
         s = s.replace(",", "")
 
-    s = re.sub(r"[^0-9\.-]", "", s)
+    s = re.sub(r"[^0-9\\.-]", "", s)
 
     try:
         return float(s)
@@ -174,6 +192,16 @@ def aplicar_estilo(fig):
     )
     return fig
 
+def preparar_base_eventos(df, coluna_evento):
+    if not coluna_evento or coluna_evento not in df.columns:
+        return df.copy()
+
+    base = df.copy()
+    base["_EVENTO_TEXTO_"] = base[coluna_evento].astype(str).str.strip()
+    base = base[base["_EVENTO_TEXTO_"] != ""]
+    base = base[~base["_EVENTO_TEXTO_"].str.upper().isin(["NAN", "NONE", "<NA>"])]
+    return base
+
 try:
     df = carregar_dados()
     horario = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
@@ -202,13 +230,8 @@ try:
         df[coluna_cobranca] = df[coluna_cobranca].apply(normalizar_cobranca)
 
     if coluna_data and coluna_data in df.columns:
-        df = df[df[coluna_data].notna()].copy()
-
         df["Ano"] = df[coluna_data].dt.year
         df["Mes_Num"] = df[coluna_data].dt.month
-
-        df = df[df["Ano"] != 2022].copy()
-        df = df[df["Mes_Num"].isin([5, 6, 7, 8])].copy()
 
         mapa_meses = {
             1: "Jan", 2: "Fev", 3: "Mar", 4: "Abr", 5: "Mai", 6: "Jun",
@@ -219,14 +242,21 @@ try:
         df["AnoMes"] = df["Ano"].astype("Int64").astype(str) + "-" + df["Mes_Abrev"].fillna("")
         df.loc[df["Ano"].isna(), "AnoMes"] = None
 
-    df_historico = df.copy()
+    if "Ano" in df.columns:
+        df = df[df["Ano"] != 2022].copy()
+
+    df_historico = preparar_base_eventos(df.copy(), coluna_evento)
     df_filtrado = df.copy()
 
     st.sidebar.subheader("🎯 FILTROS")
 
     if "Ano" in df_filtrado.columns and df_filtrado["Ano"].notna().any():
         opcoes_ano = sorted(df_filtrado["Ano"].dropna().astype(int).unique().tolist())
-        anos_sel = st.sidebar.multiselect("FILTRAR ANO", options=opcoes_ano, default=[])
+        anos_sel = st.sidebar.multiselect(
+            "FILTRAR ANO",
+            options=opcoes_ano,
+            default=[]
+        )
         if anos_sel:
             df_filtrado = df_filtrado[df_filtrado["Ano"].isin(anos_sel)]
 
@@ -248,18 +278,15 @@ try:
         if natureza_sel:
             df_filtrado = df_filtrado[df_filtrado[coluna_natureza].astype(str).isin(natureza_sel)]
 
-    if coluna_data and df_historico[coluna_data].notna().any():
-        data_base_min = df_historico[coluna_data].min().date()
-        data_base_max = df_historico[coluna_data].max().date()
-
-        limite_min = date(data_base_min.year - 2, 1, 1)
-        limite_max = date(data_base_max.year + 2, 12, 31)
+    if coluna_data and df_filtrado[coluna_data].notna().any():
+        data_base_min = df_filtrado[coluna_data].min().date()
+        data_base_max = df_filtrado[coluna_data].max().date()
 
         intervalo = st.sidebar.date_input(
             "FILTRAR PERÍODO",
             value=(data_base_min, data_base_max),
-            min_value=limite_min,
-            max_value=limite_max
+            min_value=data_base_min,
+            max_value=data_base_max
         )
 
         if isinstance(intervalo, tuple) and len(intervalo) == 2:
@@ -268,6 +295,8 @@ try:
                 (df_filtrado[coluna_data].dt.date >= data_ini) &
                 (df_filtrado[coluna_data].dt.date <= data_fim)
             ]
+
+    df_filtrado_eventos = preparar_base_eventos(df_filtrado.copy(), coluna_evento)
 
     st.subheader("📚 PANORAMA GERAL")
     st.caption("OS GRÁFICOS ABAIXO PERMANECEM FIXOS E NÃO SÃO ALTERADOS PELOS FILTROS OPERACIONAIS DA BARRA LATERAL.")
@@ -281,7 +310,7 @@ try:
             .reset_index(name="Eventos")
             .sort_values("Ano")
         )
-        eventos_ano["Ano"] = eventos_ano["Ano"].astype(str)
+        eventos_ano["Ano"] = eventos_ano["Ano"].astype(int).astype(str)
 
         fig = px.bar(
             eventos_ano,
@@ -294,7 +323,7 @@ try:
         )
         fig.update_layout(xaxis_title="ANO", yaxis_title="EVENTOS", showlegend=False)
         fig = aplicar_estilo(fig)
-        st.plotly_chart(fig, use_container_width=True, key="grafico_eventos_por_ano")
+        st.plotly_chart(fig, use_container_width=True)
 
     if "Ano" in df_historico.columns and coluna_publico and df_historico["Ano"].notna().any():
         st.markdown("### 👥 PÚBLICO PREVISTO POR ANO")
@@ -305,7 +334,7 @@ try:
             .reset_index()
             .sort_values("Ano")
         )
-        publico_ano["Ano"] = publico_ano["Ano"].astype(str)
+        publico_ano["Ano"] = publico_ano["Ano"].astype(int).astype(str)
 
         fig = px.bar(
             publico_ano,
@@ -318,26 +347,26 @@ try:
         )
         fig.update_layout(xaxis_title="ANO", yaxis_title="PÚBLICO PREVISTO", showlegend=False)
         fig = aplicar_estilo(fig)
-        st.plotly_chart(fig, use_container_width=True, key="grafico_publico_por_ano")
+        st.plotly_chart(fig, use_container_width=True)
 
     if "Ano" in df_historico.columns and "Mes_Num" in df_historico.columns and df_historico["Ano"].notna().any():
         st.markdown("### 📅 COMPARATIVO DE EVENTOS POR MÊS E ANO")
         eventos_mes_ano = (
-            df_historico.dropna(subset=["Ano", "Mes_Num"])
+            df_historico.dropna(subset=["Ano", "Mes_Num", "Mes_Abrev"])
             .groupby(["Ano", "Mes_Num", "Mes_Abrev"])
             .size()
             .reset_index(name="Eventos")
             .sort_values(["Ano", "Mes_Num"])
         )
 
-        ordem_meses_abrev = ["Mai", "Jun", "Jul", "Ago"]
+        ordem_meses_abrev = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
         eventos_mes_ano["Mes_Abrev"] = pd.Categorical(
             eventos_mes_ano["Mes_Abrev"],
             categories=ordem_meses_abrev,
             ordered=True
         )
-        eventos_mes_ano["Ano"] = eventos_mes_ano["Ano"].astype(str)
-        eventos_mes_ano = eventos_mes_ano.sort_values(["Ano", "Mes_Abrev"])
+        eventos_mes_ano["Ano"] = eventos_mes_ano["Ano"].astype(int).astype(str)
+        eventos_mes_ano = eventos_mes_ano.sort_values(["Ano", "Mes_Num"])
 
         fig = px.bar(
             eventos_mes_ano,
@@ -351,58 +380,66 @@ try:
         )
         fig.update_layout(xaxis_title="MÊS", yaxis_title="EVENTOS", legend_title="ANO")
         fig = aplicar_estilo(fig)
-        st.plotly_chart(fig, use_container_width=True, key="grafico_comparativo_eventos_mes_ano")
+        st.plotly_chart(fig, use_container_width=True)
 
-    if "Ano" in df_historico.columns and "Mes_Num" in df_historico.columns and df_historico["Ano"].notna().any():
+    if "AnoMes" in df_historico.columns and df_historico["AnoMes"].notna().any():
         st.markdown("### 📌 EVENTOS POR ANO-MÊS")
 
-        eventos_anomes = (
-            df_historico.dropna(subset=["Ano", "Mes_Num"])
-            .groupby(["Ano", "Mes_Num", "Mes_Abrev"])
-            .size()
-            .reset_index(name="Eventos")
-            .sort_values(["Ano", "Mes_Num"])
+        ordem_anomes = (
+            df_historico.dropna(subset=["Ano", "Mes_Num", "AnoMes"])
+            [["Ano", "Mes_Num", "AnoMes"]]
+            .drop_duplicates()
+            .sort_values(["Ano", "Mes_Num"])["AnoMes"]
+            .tolist()
         )
 
-        ordem_meses_abrev = ["Mai", "Jun", "Jul", "Ago"]
-        eventos_anomes["Mes_Abrev"] = pd.Categorical(
-            eventos_anomes["Mes_Abrev"],
-            categories=ordem_meses_abrev,
+        eventos_anomes = (
+            df_historico.dropna(subset=["AnoMes"])
+            .groupby("AnoMes")
+            .size()
+            .reset_index(name="Eventos")
+        )
+
+        eventos_anomes["AnoMes"] = pd.Categorical(
+            eventos_anomes["AnoMes"],
+            categories=ordem_anomes,
             ordered=True
         )
-        eventos_anomes["Ano"] = eventos_anomes["Ano"].astype(str)
-        eventos_anomes = eventos_anomes.sort_values(["Ano", "Mes_Abrev"])
+        eventos_anomes = eventos_anomes.sort_values("AnoMes")
 
         fig = px.bar(
             eventos_anomes,
-            x="Mes_Abrev",
+            x="AnoMes",
             y="Eventos",
-            color="Ano",
-            barmode="group",
+            color="Eventos",
             text_auto=True,
-            color_discrete_sequence=PALETA_BARRAS,
+            color_continuous_scale="Blues",
             template="simple_white"
         )
-
         fig.update_layout(
-            xaxis_title="MÊS",
+            xaxis_title="ANO-MÊS",
             yaxis_title="EVENTOS",
-            legend_title="ANO"
+            coloraxis_showscale=False
         )
-
         fig = aplicar_estilo(fig)
-        st.plotly_chart(fig, use_container_width=True, key="grafico_eventos_por_ano_mes")
+        st.plotly_chart(fig, use_container_width=True)
 
-    if df_filtrado.empty:
+    if df_filtrado_eventos.empty:
         st.warning("NENHUM REGISTRO ENCONTRADO COM OS FILTROS APLICADOS.")
         st.stop()
 
     st.subheader("📌 INDICADORES OPERACIONAIS")
 
-    total_eventos = len(df_filtrado)
-    total_publico = int(df_filtrado[coluna_publico].sum()) if coluna_publico and coluna_publico in df_filtrado.columns else 0
-    total_cidades = df_filtrado[coluna_cidade].nunique() if coluna_cidade and coluna_cidade in df_filtrado.columns else 0
-    total_comandos = df_filtrado[coluna_comando].nunique() if coluna_comando and coluna_comando in df_filtrado.columns else 0
+    total_eventos = len(df_filtrado_eventos)
+    total_publico = int(df_filtrado[coluna_publico].fillna(0).sum()) if coluna_publico and coluna_publico in df_filtrado.columns else 0
+    total_cidades = (
+        df_filtrado[coluna_cidade].dropna().astype(str).apply(normalizar_texto).nunique()
+        if coluna_cidade and coluna_cidade in df_filtrado.columns else 0
+    )
+    total_comandos = (
+        df_filtrado[coluna_comando].dropna().astype(str).apply(normalizar_texto).nunique()
+        if coluna_comando and coluna_comando in df_filtrado.columns else 0
+    )
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("🎉 EVENTOS", total_eventos)
@@ -413,7 +450,7 @@ try:
     if coluna_natureza:
         st.subheader("🎭 EVENTOS POR NATUREZA")
         natureza_eventos = (
-            df_filtrado.dropna(subset=[coluna_natureza])
+            df_filtrado_eventos.dropna(subset=[coluna_natureza])
             .groupby(coluna_natureza)
             .size()
             .reset_index(name="Eventos")
@@ -427,12 +464,9 @@ try:
             color_discrete_sequence=PALETA_PIZZA,
             template="simple_white"
         )
-        fig.update_traces(
-            textinfo="percent+label",
-            marker=dict(line=dict(color="white", width=2))
-        )
+        fig.update_traces(textinfo="percent+label", marker=dict(line=dict(color="white", width=2)))
         fig = aplicar_estilo(fig)
-        st.plotly_chart(fig, use_container_width=True, key="grafico_natureza_eventos")
+        st.plotly_chart(fig, use_container_width=True)
 
     if coluna_tipo_publico:
         st.subheader("🥧 TIPO DE PÚBLICO")
@@ -451,17 +485,15 @@ try:
             color_discrete_sequence=PALETA_PIZZA,
             template="simple_white"
         )
-        fig.update_traces(
-            textinfo="percent+label",
-            marker=dict(line=dict(color="white", width=2))
-        )
+        fig.update_traces(textinfo="percent+label", marker=dict(line=dict(color="white", width=2)))
         fig = aplicar_estilo(fig)
-        st.plotly_chart(fig, use_container_width=True, key="grafico_tipo_publico")
+        st.plotly_chart(fig, use_container_width=True)
 
     if coluna_comando:
         st.subheader("🚔 EVENTOS POR COMANDO")
         comando_eventos = (
-            df_filtrado.groupby(coluna_comando)
+            df_filtrado_eventos.dropna(subset=[coluna_comando])
+            .groupby(coluna_comando)
             .size()
             .reset_index(name="Eventos")
             .sort_values(by="Eventos", ascending=False)
@@ -479,12 +511,13 @@ try:
         )
         fig.update_layout(showlegend=False, xaxis_title="COMANDO", yaxis_title="EVENTOS")
         fig = aplicar_estilo(fig)
-        st.plotly_chart(fig, use_container_width=True, key="grafico_comandos_eventos")
+        st.plotly_chart(fig, use_container_width=True)
 
     if coluna_cidade:
         st.subheader("🏙️ CIDADES COM MAIS EVENTOS")
         cidade_eventos = (
-            df_filtrado.groupby(coluna_cidade)
+            df_filtrado_eventos.dropna(subset=[coluna_cidade])
+            .groupby(coluna_cidade)
             .size()
             .reset_index(name="Eventos")
             .sort_values(by="Eventos", ascending=False)
@@ -503,12 +536,13 @@ try:
         )
         fig.update_layout(showlegend=False, xaxis_title="CIDADE", yaxis_title="EVENTOS")
         fig = aplicar_estilo(fig)
-        st.plotly_chart(fig, use_container_width=True, key="grafico_cidades_eventos")
+        st.plotly_chart(fig, use_container_width=True)
 
     if coluna_evento and coluna_publico:
         st.subheader("🎯 EVENTOS COM MAIOR PÚBLICO PREVISTO")
         eventos_publico = (
-            df_filtrado.groupby(coluna_evento)[coluna_publico]
+            df_filtrado_eventos.dropna(subset=[coluna_evento])
+            .groupby(coluna_evento)[coluna_publico]
             .sum()
             .reset_index()
             .sort_values(by=coluna_publico, ascending=False)
@@ -527,12 +561,15 @@ try:
         )
         fig.update_layout(showlegend=False, xaxis_title="EVENTO", yaxis_title="PÚBLICO PREVISTO")
         fig = aplicar_estilo(fig)
-        st.plotly_chart(fig, use_container_width=True, key="grafico_eventos_maior_publico")
+        st.plotly_chart(fig, use_container_width=True)
 
     if coluna_publico:
         st.subheader("📊 DISTRIBUIÇÃO DO PÚBLICO PREVISTO")
-        fig = px.histogram(df_filtrado, x=coluna_publico, nbins=20)
-        st.plotly_chart(fig, use_container_width=True, key="grafico_distribuicao_publico")
+        fig = px.histogram(df_filtrado, x=coluna_publico, nbins=20, template="simple_white")
+        fig.update_traces(marker_color=COR_HISTOGRAMA, marker_line_color="white", marker_line_width=1)
+        fig.update_layout(xaxis_title="PÚBLICO PREVISTO", yaxis_title="FREQUÊNCIA", showlegend=False)
+        fig = aplicar_estilo(fig)
+        st.plotly_chart(fig, use_container_width=True)
 
     if coluna_comando and coluna_publico:
         st.subheader("🚔 PÚBLICO PREVISTO POR COMANDO")
@@ -555,31 +592,9 @@ try:
         )
         fig.update_layout(showlegend=False, xaxis_title="COMANDO", yaxis_title="PÚBLICO PREVISTO")
         fig = aplicar_estilo(fig)
-        st.plotly_chart(fig, use_container_width=True, key="grafico_publico_por_comando")
+        st.plotly_chart(fig, use_container_width=True)
 
-    if coluna_cidade:
-        st.subheader("🥧 PARTICIPAÇÃO DAS CIDADES")
-        pizza_cidade = (
-            df_filtrado.groupby(coluna_cidade)
-            .size()
-            .reset_index(name="Eventos")
-            .sort_values(by="Eventos", ascending=False)
-            .head(10)
-        )
-        fig = px.pie(
-            pizza_cidade,
-            names=coluna_cidade,
-            values="Eventos",
-            hole=0.45,
-            color_discrete_sequence=PALETA_PIZZA,
-            template="simple_white"
-        )
-        fig.update_traces(
-            textinfo="percent+label",
-            marker=dict(line=dict(color="white", width=2))
-        )
-        fig = aplicar_estilo(fig)
-        st.plotly_chart(fig, use_container_width=True, key="grafico_participacao_cidades")
+
 
     if coluna_cidade and coluna_publico:
         st.subheader("📈 MÉDIA DE PÚBLICO POR CIDADE")
@@ -590,17 +605,11 @@ try:
             .sort_values(by=coluna_publico, ascending=False)
             .head(15)
         )
-        fig = px.line(
-            media_cidade,
-            x=coluna_cidade,
-            y=coluna_publico,
-            markers=True,
-            template="simple_white"
-        )
+        fig = px.line(media_cidade, x=coluna_cidade, y=coluna_publico, markers=True, template="simple_white")
         fig.update_traces(line=dict(color=COR_LINHA_1, width=3), marker=dict(size=8, color=COR_LINHA_1))
         fig.update_layout(xaxis_title="CIDADE", yaxis_title="MÉDIA DE PÚBLICO", showlegend=False)
         fig = aplicar_estilo(fig)
-        st.plotly_chart(fig, use_container_width=True, key="grafico_media_publico_cidade")
+        st.plotly_chart(fig, use_container_width=True)
 
         st.subheader("🌡️ INTENSIDADE DE PÚBLICO POR CIDADE")
         mapa_df = (
@@ -619,12 +628,8 @@ try:
                 colorscale="Blues"
             )
         )
-        fig_heat.update_layout(
-            template="simple_white",
-            height=450,
-            margin=dict(l=20, r=20, t=50, b=20)
-        )
-        st.plotly_chart(fig_heat, use_container_width=True, key="grafico_heatmap_publico_cidade")
+        fig_heat.update_layout(template="simple_white", height=450, margin=dict(l=20, r=20, t=50, b=20))
+        st.plotly_chart(fig_heat, use_container_width=True)
 
     if coluna_data and coluna_publico and df_filtrado[coluna_data].notna().any():
         st.subheader("📈 EVOLUÇÃO DO PÚBLICO")
@@ -635,17 +640,11 @@ try:
             .reset_index()
             .sort_values(coluna_data)
         )
-        fig = px.line(
-            evolucao,
-            x=coluna_data,
-            y=coluna_publico,
-            markers=True,
-            template="simple_white"
-        )
+        fig = px.line(evolucao, x=coluna_data, y=coluna_publico, markers=True, template="simple_white")
         fig.update_traces(line=dict(color=COR_LINHA_2, width=3), marker=dict(size=8, color=COR_LINHA_2))
         fig.update_layout(xaxis_title="DATA", yaxis_title="PÚBLICO PREVISTO", showlegend=False)
         fig = aplicar_estilo(fig)
-        st.plotly_chart(fig, use_container_width=True, key="grafico_evolucao_publico")
+        st.plotly_chart(fig, use_container_width=True)
 
     if coluna_publico:
         st.subheader("🔥 TOP 10 - PÚBLICO PREVISTO")
@@ -677,7 +676,7 @@ try:
 {mediana:,.0f} PESSOAS
 
 🎉 TOTAL DE EVENTOS MONITORADOS:
-{len(df_filtrado)}
+{total_eventos}
 
 🏙️ TOTAL DE CIDADES:
 {df_filtrado[coluna_cidade].nunique() if coluna_cidade else 0}
@@ -693,7 +692,7 @@ try:
             .agg(["sum", "mean", "count"])
             .reset_index()
         )
-        ranking_operacional.columns = ["COMANDO", "PÚBLICO TOTAL", "MÉDIA PÚBLICO", "EVENTOS"]
+        ranking_operacional.columns = ["COMANDO", "PÚBLICO TOTAL", "MÉDIA PÚBLICO", "REGISTROS"]
         st.dataframe(ranking_operacional, use_container_width=True)
 
     st.subheader("📄 DADOS OPERACIONAIS")
@@ -713,7 +712,7 @@ try:
     st.download_button(
         label="⬇️ BAIXAR CSV",
         data=csv,
-        file_name="festas_juninas_filtrado.csv",
+        file_name="operacao_sao_joao_filtrado.csv",
         mime="text/csv"
     )
 
