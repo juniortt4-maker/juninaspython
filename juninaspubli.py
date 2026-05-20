@@ -47,7 +47,6 @@ PALETA_PIZZA = [
     "#5B8FF9", "#61DDAA", "#F6BD16", "#7262FD", "#F08BB4", "#78D3F8"
 ]
 
-COR_BARRA_UNICA = "#5B8FF9"
 COR_LINHA_1 = "#5B8FF9"
 COR_LINHA_2 = "#61DDAA"
 COR_HISTOGRAMA = "#9CC3FF"
@@ -56,11 +55,7 @@ MAPA_MESES = {
     1: "Jan", 2: "Fev", 3: "Mar", 4: "Abr", 5: "Mai", 6: "Jun",
     7: "Jul", 8: "Ago", 9: "Set", 10: "Out", 11: "Nov", 12: "Dez"
 }
-
 ORDEM_MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
-
-def caixa_alta(texto):
-    return str(texto).upper()
 
 def normalizar_texto(texto):
     texto = str(texto).strip().upper()
@@ -72,7 +67,7 @@ def normalizar_texto(texto):
 def carregar_dados():
     df = pd.read_csv(url)
     df = df.dropna(how="all")
-    df.columns = [col.strip() for col in df.columns]
+    df.columns = [str(col).strip() for col in df.columns]
     return df
 
 def localizar_coluna(colunas, termos):
@@ -204,16 +199,6 @@ def aplicar_estilo(fig):
     )
     return fig
 
-def preparar_base_eventos(df, coluna_evento):
-    if not coluna_evento or coluna_evento not in df.columns:
-        return df.copy()
-
-    base = df.copy()
-    base["_EVENTO_TEXTO_"] = base[coluna_evento].astype(str).str.strip()
-    base = base[base["_EVENTO_TEXTO_"] != ""]
-    base = base[~base["_EVENTO_TEXTO_"].str.upper().isin(["NAN", "NONE", "<NA>"])]
-    return base
-
 try:
     df = carregar_dados()
     horario = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
@@ -243,6 +228,8 @@ try:
     if coluna_cobranca and coluna_cobranca in df.columns:
         df[coluna_cobranca] = df[coluna_cobranca].apply(normalizar_cobranca)
 
+    df["_ID_LINHA_EVENTO_"] = range(1, len(df) + 1)
+
     df["DATA_INICIO_BASE"] = pd.NaT
     df["DATA_FIM_BASE"] = pd.NaT
 
@@ -252,7 +239,6 @@ try:
     if coluna_fim and coluna_fim in df.columns:
         df["DATA_FIM_BASE"] = pd.to_datetime(df[coluna_fim], errors="coerce", dayfirst=True)
 
-    # Base oficial para gráficos temporais: somente INICIO
     df["DATA_EVENTO_BASE"] = df["DATA_INICIO_BASE"]
 
     df["Ano"] = df["DATA_EVENTO_BASE"].dt.year
@@ -267,7 +253,8 @@ try:
         + df.loc[mask_data_valida, "Mes_Abrev"].astype(str)
     )
 
-    df_historico = preparar_base_eventos(df.copy(), coluna_evento)
+    # Histórico e base filtrada: contar por linha válida, não por nome do evento
+    df_historico = df.copy()
     df_filtrado = df.copy()
 
     st.sidebar.subheader("🎯 FILTROS")
@@ -323,8 +310,6 @@ try:
                         )
                     ]
 
-    df_filtrado_eventos = preparar_base_eventos(df_filtrado.copy(), coluna_evento)
-
     st.subheader("📚 PANORAMA GERAL")
     st.caption("OS GRÁFICOS ABAIXO PERMANECEM FIXOS E NÃO SÃO ALTERADOS PELOS FILTROS OPERACIONAIS DA BARRA LATERAL.")
 
@@ -332,8 +317,8 @@ try:
         st.markdown("### 📊 COMPARATIVO DE EVENTOS POR ANO")
         eventos_ano = (
             df_historico.dropna(subset=["Ano"])
-            .groupby("Ano")
-            .size()
+            .groupby("Ano")["_ID_LINHA_EVENTO_"]
+            .count()
             .reset_index(name="Eventos")
             .sort_values("Ano")
         )
@@ -382,8 +367,8 @@ try:
         base_mes = df_historico[df_historico["DATA_EVENTO_BASE"].notna()].copy()
 
         eventos_mes_ano = (
-            base_mes.groupby(["Ano", "Mes_Num", "Mes_Abrev"])
-            .size()
+            base_mes.groupby(["Ano", "Mes_Num", "Mes_Abrev"])["_ID_LINHA_EVENTO_"]
+            .count()
             .reset_index(name="Eventos")
             .sort_values(["Ano", "Mes_Num"])
         )
@@ -422,8 +407,8 @@ try:
 
         eventos_anomes = (
             df_historico.dropna(subset=["AnoMes"])
-            .groupby("AnoMes")
-            .size()
+            .groupby("AnoMes")["_ID_LINHA_EVENTO_"]
+            .count()
             .reset_index(name="Eventos")
         )
 
@@ -451,13 +436,13 @@ try:
         fig = aplicar_estilo(fig)
         st.plotly_chart(fig, use_container_width=True)
 
-    if df_filtrado_eventos.empty:
+    if df_filtrado.empty:
         st.warning("NENHUM REGISTRO ENCONTRADO COM OS FILTROS APLICADOS.")
         st.stop()
 
     st.subheader("📌 INDICADORES OPERACIONAIS")
 
-    total_eventos = len(df_filtrado_eventos)
+    total_eventos = int(df_filtrado["_ID_LINHA_EVENTO_"].count())
     total_publico = int(df_filtrado[coluna_publico].fillna(0).sum()) if coluna_publico and coluna_publico in df_filtrado.columns else 0
     total_cidades = (
         df_filtrado[coluna_cidade].dropna().astype(str).apply(normalizar_texto).nunique()
@@ -477,9 +462,9 @@ try:
     if coluna_natureza:
         st.subheader("🎭 EVENTOS POR NATUREZA")
         natureza_eventos = (
-            df_filtrado_eventos.dropna(subset=[coluna_natureza])
-            .groupby(coluna_natureza)
-            .size()
+            df_filtrado.dropna(subset=[coluna_natureza])
+            .groupby(coluna_natureza)["_ID_LINHA_EVENTO_"]
+            .count()
             .reset_index(name="Eventos")
             .sort_values(by="Eventos", ascending=False)
         )
@@ -499,8 +484,8 @@ try:
         st.subheader("🥧 TIPO DE PÚBLICO")
         pizza_publico = (
             df_filtrado.dropna(subset=[coluna_tipo_publico])
-            .groupby(coluna_tipo_publico)
-            .size()
+            .groupby(coluna_tipo_publico)["_ID_LINHA_EVENTO_"]
+            .count()
             .reset_index(name="Quantidade")
             .sort_values(by="Quantidade", ascending=False)
         )
@@ -519,9 +504,9 @@ try:
     if coluna_comando:
         st.subheader("🚔 EVENTOS POR COMANDO")
         comando_eventos = (
-            df_filtrado_eventos.dropna(subset=[coluna_comando])
-            .groupby(coluna_comando)
-            .size()
+            df_filtrado.dropna(subset=[coluna_comando])
+            .groupby(coluna_comando)["_ID_LINHA_EVENTO_"]
+            .count()
             .reset_index(name="Eventos")
             .sort_values(by="Eventos", ascending=False)
         )
@@ -543,9 +528,9 @@ try:
     if coluna_cidade:
         st.subheader("🏙️ CIDADES COM MAIS EVENTOS")
         cidade_eventos = (
-            df_filtrado_eventos.dropna(subset=[coluna_cidade])
-            .groupby(coluna_cidade)
-            .size()
+            df_filtrado.dropna(subset=[coluna_cidade])
+            .groupby(coluna_cidade)["_ID_LINHA_EVENTO_"]
+            .count()
             .reset_index(name="Eventos")
             .sort_values(by="Eventos", ascending=False)
             .head(15)
@@ -568,7 +553,7 @@ try:
     if coluna_evento and coluna_publico:
         st.subheader("🎯 EVENTOS COM MAIOR PÚBLICO PREVISTO")
         eventos_publico = (
-            df_filtrado_eventos.dropna(subset=[coluna_evento])
+            df_filtrado.dropna(subset=[coluna_evento])
             .groupby(coluna_evento)[coluna_publico]
             .sum()
             .reset_index()
