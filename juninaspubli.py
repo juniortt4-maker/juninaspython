@@ -215,13 +215,15 @@ try:
     coluna_cidade = localizar_coluna(colunas, ["CIDADE", "MUNICIPIO"])
     coluna_evento = localizar_coluna(colunas, ["EVENTO", "NOME EVENTO"])
     coluna_publico = localizar_coluna(colunas, ["PUBLICO", "PUBLICO PREVISTO"])
-    coluna_data = localizar_coluna(colunas, ["DATA"])
+    coluna_inicio = localizar_coluna(colunas, ["INICIO", "DATA INICIO", "DATA DE INICIO"])
+    coluna_fim = localizar_coluna(colunas, ["FIM", "DATA FIM", "DATA DE FIM"])
     coluna_natureza = localizar_coluna(colunas, ["NATUREZA"])
     coluna_tipo_publico = localizar_coluna(colunas, ["TIPO DE PUBLICO", "TIPO PUBLICO"])
     coluna_cobranca = colunas[19] if len(colunas) > 19 else None
 
     df = tratar_coluna_numerica(df, coluna_publico)
-    df = tratar_coluna_data(df, coluna_data)
+    df = tratar_coluna_data(df, coluna_inicio)
+    df = tratar_coluna_data(df, coluna_fim)
     df = tratar_coluna_categorica(df, coluna_tipo_publico)
     df = tratar_coluna_categorica(df, coluna_natureza)
     df = tratar_coluna_categorica(df, coluna_cobranca)
@@ -229,9 +231,15 @@ try:
     if coluna_cobranca and coluna_cobranca in df.columns:
         df[coluna_cobranca] = df[coluna_cobranca].apply(normalizar_cobranca)
 
-    if coluna_data and coluna_data in df.columns:
-        df["Ano"] = df[coluna_data].dt.year
-        df["Mes_Num"] = df[coluna_data].dt.month
+    coluna_data_base = None
+    if coluna_inicio and coluna_inicio in df.columns and df[coluna_inicio].notna().any():
+        coluna_data_base = coluna_inicio
+    elif coluna_fim and coluna_fim in df.columns and df[coluna_fim].notna().any():
+        coluna_data_base = coluna_fim
+
+    if coluna_data_base:
+        df["Ano"] = df[coluna_data_base].dt.year
+        df["Mes_Num"] = df[coluna_data_base].dt.month
 
         mapa_meses = {
             1: "Jan", 2: "Fev", 3: "Mar", 4: "Abr", 5: "Mai", 6: "Jun",
@@ -241,9 +249,6 @@ try:
         df["Mes_Abrev"] = df["Mes_Num"].map(mapa_meses)
         df["AnoMes"] = df["Ano"].astype("Int64").astype(str) + "-" + df["Mes_Abrev"].fillna("")
         df.loc[df["Ano"].isna(), "AnoMes"] = None
-
-    if "Ano" in df.columns:
-        df = df[df["Ano"] != 2022].copy()
 
     df_historico = preparar_base_eventos(df.copy(), coluna_evento)
     df_filtrado = df.copy()
@@ -278,23 +283,32 @@ try:
         if natureza_sel:
             df_filtrado = df_filtrado[df_filtrado[coluna_natureza].astype(str).isin(natureza_sel)]
 
-    if coluna_data and df_filtrado[coluna_data].notna().any():
-        data_base_min = df_filtrado[coluna_data].min().date()
-        data_base_max = df_filtrado[coluna_data].max().date()
+    if coluna_inicio and coluna_fim and coluna_inicio in df_filtrado.columns and coluna_fim in df_filtrado.columns:
+        inicio_min = df_filtrado[coluna_inicio].dropna().min() if df_filtrado[coluna_inicio].notna().any() else pd.NaT
+        fim_max = df_filtrado[coluna_fim].dropna().max() if df_filtrado[coluna_fim].notna().any() else pd.NaT
 
-        intervalo = st.sidebar.date_input(
-            "FILTRAR PERÍODO",
-            value=(data_base_min, data_base_max),
-            min_value=data_base_min,
-            max_value=data_base_max
-        )
+        if pd.notna(inicio_min) and pd.notna(fim_max):
+            data_base_min = inicio_min.date()
+            data_base_max = fim_max.date()
 
-        if isinstance(intervalo, tuple) and len(intervalo) == 2:
-            data_ini, data_fim = intervalo
-            df_filtrado = df_filtrado[
-                (df_filtrado[coluna_data].dt.date >= data_ini) &
-                (df_filtrado[coluna_data].dt.date <= data_fim)
-            ]
+            intervalo = st.sidebar.date_input(
+                "FILTRAR PERÍODO",
+                value=[data_base_min, data_base_max],
+                min_value=data_base_min,
+                max_value=data_base_max
+            )
+
+            if isinstance(intervalo, (list, tuple)) and len(intervalo) == 2:
+                data_ini, data_fim_filtro = intervalo
+                if data_ini and data_fim_filtro:
+                    df_filtrado = df_filtrado[
+                        (
+                            df_filtrado[coluna_inicio].dt.date.fillna(data_ini) <= data_fim_filtro
+                        ) &
+                        (
+                            df_filtrado[coluna_fim].dt.date.fillna(data_fim_filtro) >= data_ini
+                        )
+                    ]
 
     df_filtrado_eventos = preparar_base_eventos(df_filtrado.copy(), coluna_evento)
 
@@ -629,16 +643,16 @@ try:
         fig_heat.update_layout(template="simple_white", height=450, margin=dict(l=20, r=20, t=50, b=20))
         st.plotly_chart(fig_heat, use_container_width=True)
 
-    if coluna_data and coluna_publico and df_filtrado[coluna_data].notna().any():
+    if coluna_data_base and coluna_publico and df_filtrado[coluna_data_base].notna().any():
         st.subheader("📈 EVOLUÇÃO DO PÚBLICO")
         evolucao = (
-            df_filtrado.dropna(subset=[coluna_data])
-            .groupby(coluna_data)[coluna_publico]
+            df_filtrado.dropna(subset=[coluna_data_base])
+            .groupby(coluna_data_base)[coluna_publico]
             .sum()
             .reset_index()
-            .sort_values(coluna_data)
+            .sort_values(coluna_data_base)
         )
-        fig = px.line(evolucao, x=coluna_data, y=coluna_publico, markers=True, template="simple_white")
+        fig = px.line(evolucao, x=coluna_data_base, y=coluna_publico, markers=True, template="simple_white")
         fig.update_traces(line=dict(color=COR_LINHA_2, width=3), marker=dict(size=8, color=COR_LINHA_2))
         fig.update_layout(xaxis_title="DATA", yaxis_title="PÚBLICO PREVISTO", showlegend=False)
         fig = aplicar_estilo(fig)
