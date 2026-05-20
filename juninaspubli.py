@@ -51,12 +51,12 @@ url = (
 )
 
 # =========================================================
-# CORES
+# PALETAS
 # =========================================================
 
 PALETA_BARRAS = [
-    "#5B8FF9", "#61DDAA", "#65789B", "#F6BD16", "#7262FD",
-    "#78D3F8", "#9661BC", "#F6903D", "#008685", "#F08BB4"
+    "#5B8FF9", "#61DDAA", "#65789B", "#F6BD16",
+    "#7262FD", "#78D3F8", "#9661BC", "#F6903D"
 ]
 
 PALETA_PIZZA = [
@@ -64,6 +64,8 @@ PALETA_PIZZA = [
     "#7262FD", "#F08BB4", "#78D3F8"
 ]
 
+COR_LINHA_1 = "#5B8FF9"
+COR_LINHA_2 = "#61DDAA"
 COR_HISTOGRAMA = "#9CC3FF"
 
 # =========================================================
@@ -73,16 +75,14 @@ COR_HISTOGRAMA = "#9CC3FF"
 def normalizar_texto(texto):
     texto = str(texto).strip().upper()
     texto = unicodedata.normalize(
-        "NFKD",
-        texto
+        "NFKD", texto
     ).encode(
-        "ASCII",
-        "ignore"
-    ).decode("utf-8")
-
+        "ASCII", "ignore"
+    ).decode(
+        "utf-8"
+    )
     texto = re.sub(r"\s+", " ", texto)
     return texto
-
 
 @st.cache_data(ttl=60)
 def carregar_dados():
@@ -90,41 +90,35 @@ def carregar_dados():
 
     df = df.dropna(how="all")
 
-    df.columns = [str(col).strip() for col in df.columns]
+    df.columns = [str(c).strip() for c in df.columns]
 
     return df
-
 
 def localizar_coluna(colunas, termos):
     for termo in termos:
         termo_norm = normalizar_texto(termo)
 
-        for c in colunas:
-            if termo_norm in normalizar_texto(c):
-                return c
+        for coluna in colunas:
+            if termo_norm in normalizar_texto(coluna):
+                return coluna
 
     return None
 
-
 def converter_numero(valor):
     if pd.isna(valor):
-        return pd.NA
+        return 0
 
-    s = str(valor).strip()
+    valor = str(valor)
 
-    if s == "":
-        return pd.NA
+    valor = valor.replace(".", "")
+    valor = valor.replace(",", ".")
 
-    s = s.replace(".", "")
-    s = s.replace(",", ".")
-
-    s = re.sub(r"[^0-9.-]", "", s)
+    valor = re.sub(r"[^0-9.-]", "", valor)
 
     try:
-        return float(s)
+        return float(valor)
     except:
-        return pd.NA
-
+        return 0
 
 def aplicar_estilo(fig):
 
@@ -133,11 +127,14 @@ def aplicar_estilo(fig):
         plot_bgcolor="white",
         paper_bgcolor="white",
         font=dict(size=13, color="#3B4A5A"),
+        bargap=0.20,
         margin=dict(l=20, r=20, t=50, b=20),
+
         xaxis=dict(
             showgrid=False,
             zeroline=False
         ),
+
         yaxis=dict(
             showgrid=True,
             gridcolor="#EEF2F7",
@@ -146,7 +143,6 @@ def aplicar_estilo(fig):
     )
 
     return fig
-
 
 # =========================================================
 # INÍCIO
@@ -161,54 +157,29 @@ try:
     st.sidebar.success("🟢 DASHBOARD SINCRONIZADO")
     st.sidebar.info(f"ÚLTIMA ATUALIZAÇÃO:\n{horario}")
 
+    # =====================================================
+    # LOCALIZAR COLUNAS
+    # =====================================================
+
     colunas = df.columns.tolist()
 
-    # =====================================================
-    # LOCALIZAÇÃO DAS COLUNAS
-    # =====================================================
-
     coluna_comando = localizar_coluna(colunas, ["COMANDO"])
-
-    coluna_cidade = localizar_coluna(
-        colunas,
-        ["CIDADE", "MUNICIPIO"]
-    )
-
-    coluna_evento = localizar_coluna(
-        colunas,
-        ["EVENTO", "NOME EVENTO"]
-    )
-
-    coluna_publico = localizar_coluna(
-        colunas,
-        ["PUBLICO", "PUBLICO PREVISTO"]
-    )
-
-    coluna_data = localizar_coluna(
-        colunas,
-        ["DATA EVENTO", "DATA"]
-    )
-
-    coluna_natureza = localizar_coluna(
-        colunas,
-        ["NATUREZA"]
-    )
-
+    coluna_cidade = localizar_coluna(colunas, ["CIDADE", "MUNICIPIO"])
+    coluna_evento = localizar_coluna(colunas, ["EVENTO"])
+    coluna_publico = localizar_coluna(colunas, ["PUBLICO"])
+    coluna_data = localizar_coluna(colunas, ["DATA"])
+    coluna_natureza = localizar_coluna(colunas, ["NATUREZA"])
     coluna_tipo_publico = localizar_coluna(
         colunas,
         ["TIPO DE PUBLICO", "TIPO PUBLICO"]
     )
 
     # =====================================================
-    # TRATAMENTO
+    # TRATAMENTOS
     # =====================================================
 
     if coluna_publico:
         df[coluna_publico] = df[coluna_publico].apply(converter_numero)
-        df[coluna_publico] = pd.to_numeric(
-            df[coluna_publico],
-            errors="coerce"
-        )
 
     if coluna_data:
         df[coluna_data] = pd.to_datetime(
@@ -217,16 +188,14 @@ try:
             dayfirst=True
         )
 
-        # REMOVE DATAS INVÁLIDAS
+    # =====================================================
+    # CRIAR ANO E MÊS
+    # =====================================================
+
+    if coluna_data and coluna_data in df.columns:
+
         df = df[df[coluna_data].notna()].copy()
 
-        # REMOVE ANOS ERRADOS
-        df = df[
-            (df[coluna_data].dt.year >= 2023) &
-            (df[coluna_data].dt.year <= 2026)
-        ]
-
-        # CRIA ANO E MÊS
         df["Ano"] = df[coluna_data].dt.year
         df["Mes_Num"] = df[coluna_data].dt.month
 
@@ -247,30 +216,29 @@ try:
 
         df["Mes_Abrev"] = df["Mes_Num"].map(mapa_meses)
 
-        # REMOVE JANEIRO SEM EVENTOS
-        df = df[
-            ~(
-                (df["Mes_Num"] == 1) &
-                (df["Ano"].isin([2023, 2026]))
-            )
-        ]
+        df["AnoMes"] = (
+            df["Ano"].astype(int).astype(str)
+            + "-"
+            + df["Mes_Abrev"].astype(str)
+        )
+
+    # =====================================================
+    # BASE FILTRADA
+    # =====================================================
+
+    df_filtrado = df.copy()
 
     # =====================================================
     # FILTROS
     # =====================================================
 
-    df_filtrado = df.copy()
-
     st.sidebar.subheader("🎯 FILTROS")
 
-    # ANO
+    # FILTRO ANO
     if "Ano" in df_filtrado.columns:
 
         anos = sorted(
-            df_filtrado["Ano"]
-            .dropna()
-            .unique()
-            .tolist()
+            df_filtrado["Ano"].dropna().unique().tolist()
         )
 
         anos_sel = st.sidebar.multiselect(
@@ -284,7 +252,7 @@ try:
                 df_filtrado["Ano"].isin(anos_sel)
             ]
 
-    # COMANDO
+    # FILTRO COMANDO
     if coluna_comando:
 
         comandos = sorted(
@@ -308,7 +276,7 @@ try:
                 .isin(comandos_sel)
             ]
 
-    # CIDADE
+    # FILTRO CIDADE
     if coluna_cidade:
 
         cidades = sorted(
@@ -332,7 +300,7 @@ try:
                 .isin(cidades_sel)
             ]
 
-    # NATUREZA
+    # FILTRO NATUREZA
     if coluna_natureza:
 
         natureza = sorted(
@@ -356,27 +324,36 @@ try:
                 .isin(natureza_sel)
             ]
 
-    # PERÍODO
-    if coluna_data:
+    # FILTRO PERÍODO
+    if coluna_data and not df_filtrado.empty:
 
         data_min = df_filtrado[coluna_data].min().date()
         data_max = df_filtrado[coluna_data].max().date()
 
-        intervalo = st.sidebar.date_input(
+        periodo = st.sidebar.date_input(
             "FILTRAR PERÍODO",
             value=(data_min, data_max),
             min_value=data_min,
             max_value=data_max
         )
 
-        if isinstance(intervalo, tuple):
+        if isinstance(periodo, tuple) and len(periodo) == 2:
 
-            data_ini, data_fim = intervalo
+            inicio, fim = periodo
 
             df_filtrado = df_filtrado[
-                (df_filtrado[coluna_data].dt.date >= data_ini) &
-                (df_filtrado[coluna_data].dt.date <= data_fim)
+                (df_filtrado[coluna_data].dt.date >= inicio)
+                &
+                (df_filtrado[coluna_data].dt.date <= fim)
             ]
+
+    # =====================================================
+    # VALIDAÇÃO
+    # =====================================================
+
+    if df_filtrado.empty:
+        st.warning("NENHUM REGISTRO ENCONTRADO.")
+        st.stop()
 
     # =====================================================
     # INDICADORES
@@ -387,46 +364,42 @@ try:
     total_eventos = len(df_filtrado)
 
     total_publico = int(
-        df_filtrado[coluna_publico]
-        .fillna(0)
-        .sum()
+        df_filtrado[coluna_publico].sum()
     ) if coluna_publico else 0
 
     total_cidades = (
         df_filtrado[coluna_cidade]
         .nunique()
-        if coluna_cidade else 0
-    )
+    ) if coluna_cidade else 0
 
     total_comandos = (
         df_filtrado[coluna_comando]
         .nunique()
-        if coluna_comando else 0
-    )
+    ) if coluna_comando else 0
 
-    col1, col2, col3, col4 = st.columns(4)
+    c1, c2, c3, c4 = st.columns(4)
 
-    col1.metric("🎉 EVENTOS", total_eventos)
+    c1.metric("🎉 EVENTOS", total_eventos)
 
-    col2.metric(
+    c2.metric(
         "👥 PÚBLICO PREVISTO",
         f"{total_publico:,}".replace(",", ".")
     )
 
-    col3.metric("🏙️ CIDADES", total_cidades)
+    c3.metric("🏙️ CIDADES", total_cidades)
 
-    col4.metric("🚔 COMANDOS", total_comandos)
+    c4.metric("🚔 COMANDOS", total_comandos)
 
     # =====================================================
-    # COMPARATIVO ANO
+    # COMPARATIVO POR ANO
     # =====================================================
 
-    if "Ano" in df.columns:
+    if "Ano" in df_filtrado.columns:
 
         st.subheader("📊 COMPARATIVO DE EVENTOS POR ANO")
 
         eventos_ano = (
-            df.groupby("Ano")
+            df_filtrado.groupby("Ano")
             .size()
             .reset_index(name="Eventos")
             .sort_values("Ano")
@@ -446,17 +419,20 @@ try:
         st.plotly_chart(fig, use_container_width=True)
 
     # =====================================================
-    # COMPARATIVO ANO/MÊS
+    # COMPARATIVO MÊS/ANO
     # =====================================================
 
-    if "Mes_Abrev" in df.columns:
+    if "Mes_Abrev" in df_filtrado.columns:
 
-        st.subheader("📅 COMPARATIVO ANO/MÊS")
+        st.subheader("📅 COMPARATIVO ANO / MÊS")
 
-        comparativo = (
-            df.groupby(["Ano", "Mes_Abrev"])
+        graf_mes = (
+            df_filtrado.groupby(
+                ["Ano", "Mes_Num", "Mes_Abrev"]
+            )
             .size()
             .reset_index(name="Eventos")
+            .sort_values(["Ano", "Mes_Num"])
         )
 
         ordem = [
@@ -465,18 +441,14 @@ try:
             "Set", "Out", "Nov", "Dez"
         ]
 
-        comparativo["Mes_Abrev"] = pd.Categorical(
-            comparativo["Mes_Abrev"],
+        graf_mes["Mes_Abrev"] = pd.Categorical(
+            graf_mes["Mes_Abrev"],
             categories=ordem,
             ordered=True
         )
 
-        comparativo = comparativo.sort_values(
-            ["Ano", "Mes_Abrev"]
-        )
-
         fig = px.bar(
-            comparativo,
+            graf_mes,
             x="Mes_Abrev",
             y="Eventos",
             color="Ano",
@@ -520,14 +492,40 @@ try:
         st.plotly_chart(fig, use_container_width=True)
 
     # =====================================================
-    # EVENTOS POR CIDADE
+    # EVENTOS POR NATUREZA
+    # =====================================================
+
+    if coluna_natureza:
+
+        st.subheader("🎭 EVENTOS POR NATUREZA")
+
+        natureza_df = (
+            df_filtrado.groupby(coluna_natureza)
+            .size()
+            .reset_index(name="Eventos")
+        )
+
+        fig = px.pie(
+            natureza_df,
+            names=coluna_natureza,
+            values="Eventos",
+            hole=0.45,
+            color_discrete_sequence=PALETA_PIZZA
+        )
+
+        fig = aplicar_estilo(fig)
+
+        st.plotly_chart(fig, use_container_width=True)
+
+    # =====================================================
+    # CIDADES COM MAIS EVENTOS
     # =====================================================
 
     if coluna_cidade:
 
         st.subheader("🏙️ CIDADES COM MAIS EVENTOS")
 
-        cidades = (
+        cidades_df = (
             df_filtrado.groupby(coluna_cidade)
             .size()
             .reset_index(name="Eventos")
@@ -536,7 +534,7 @@ try:
         )
 
         fig = px.bar(
-            cidades,
+            cidades_df,
             x=coluna_cidade,
             y="Eventos",
             color=coluna_cidade,
@@ -551,69 +549,15 @@ try:
         st.plotly_chart(fig, use_container_width=True)
 
     # =====================================================
-    # TOP EVENTOS
+    # TOP 10 PÚBLICO
     # =====================================================
 
     if coluna_evento and coluna_publico:
 
-        st.subheader("🎯 EVENTOS COM MAIOR PÚBLICO PREVISTO")
-
-        eventos_publico = (
-            df_filtrado.groupby(coluna_evento)[coluna_publico]
-            .sum()
-            .reset_index()
-            .sort_values(by=coluna_publico, ascending=False)
-            .head(10)
-        )
-
-        fig = px.bar(
-            eventos_publico,
-            x=coluna_evento,
-            y=coluna_publico,
-            color=coluna_evento,
-            text_auto=".2s",
-            color_discrete_sequence=PALETA_BARRAS
-        )
-
-        fig.update_layout(showlegend=False)
-
-        fig = aplicar_estilo(fig)
-
-        st.plotly_chart(fig, use_container_width=True)
-
-    # =====================================================
-    # HISTOGRAMA
-    # =====================================================
-
-    if coluna_publico:
-
-        st.subheader("📊 DISTRIBUIÇÃO DO PÚBLICO")
-
-        fig = px.histogram(
-            df_filtrado,
-            x=coluna_publico,
-            nbins=20
-        )
-
-        fig.update_traces(
-            marker_color=COR_HISTOGRAMA
-        )
-
-        fig = aplicar_estilo(fig)
-
-        st.plotly_chart(fig, use_container_width=True)
-
-    # =====================================================
-    # TOP 10
-    # =====================================================
-
-    if coluna_publico:
-
         st.subheader("🔥 TOP 10 - PÚBLICO PREVISTO")
 
         top_publico = (
-            df_filtrado
-            .sort_values(
+            df_filtrado.sort_values(
                 by=coluna_publico,
                 ascending=False
             )
@@ -626,12 +570,12 @@ try:
         )
 
     # =====================================================
-    # ANÁLISE INTELIGENTE
+    # EVENTOS MAIOR PÚBLICO
     # =====================================================
 
-    st.subheader("🧠 ANÁLISE INTELIGENTE OPERACIONAL")
+    if coluna_publico and coluna_evento:
 
-    if coluna_publico and not df_filtrado.empty:
+        st.subheader("🧠 ANÁLISE INTELIGENTE OPERACIONAL")
 
         maior_publico = df_filtrado.loc[
             df_filtrado[coluna_publico].idxmax()
@@ -651,15 +595,8 @@ try:
             2
         )
 
-        nome_maior = (
-            maior_publico[coluna_evento]
-            if coluna_evento else "N/D"
-        )
-
-        nome_menor = (
-            menor_publico[coluna_evento]
-            if coluna_evento else "N/D"
-        )
+        nome_maior = maior_publico[coluna_evento]
+        nome_menor = menor_publico[coluna_evento]
 
         st.info(f"""
 🚨 EVENTO COM MAIOR PÚBLICO PREVISTO:
@@ -673,19 +610,10 @@ try:
 
 📈 MEDIANA DE PÚBLICO:
 {mediana:,.0f} PESSOAS
-
-🎉 TOTAL DE EVENTOS:
-{total_eventos}
-
-🏙️ TOTAL DE CIDADES:
-{total_cidades}
-
-🚔 TOTAL DE COMANDOS:
-{total_comandos}
 """)
 
     # =====================================================
-    # RANKING COMANDOS
+    # RANKING OPERACIONAL
     # =====================================================
 
     if coluna_comando and coluna_publico:
@@ -693,8 +621,7 @@ try:
         st.subheader("🏆 RANKING OPERACIONAL DOS COMANDOS")
 
         ranking = (
-            df_filtrado
-            .groupby(coluna_comando)[coluna_publico]
+            df_filtrado.groupby(coluna_comando)[coluna_publico]
             .agg(["sum", "mean", "count"])
             .reset_index()
         )
@@ -712,14 +639,64 @@ try:
         )
 
     # =====================================================
+    # EVOLUÇÃO DO PÚBLICO
+    # =====================================================
+
+    if coluna_data and coluna_publico:
+
+        st.subheader("📈 EVOLUÇÃO DO PÚBLICO")
+
+        evolucao = (
+            df_filtrado.groupby(coluna_data)[coluna_publico]
+            .sum()
+            .reset_index()
+            .sort_values(coluna_data)
+        )
+
+        fig = px.line(
+            evolucao,
+            x=coluna_data,
+            y=coluna_publico,
+            markers=True
+        )
+
+        fig.update_traces(
+            line=dict(color=COR_LINHA_2, width=3)
+        )
+
+        fig = aplicar_estilo(fig)
+
+        st.plotly_chart(fig, use_container_width=True)
+
+    # =====================================================
+    # DISTRIBUIÇÃO
+    # =====================================================
+
+    if coluna_publico:
+
+        st.subheader("📊 DISTRIBUIÇÃO DO PÚBLICO PREVISTO")
+
+        fig = px.histogram(
+            df_filtrado,
+            x=coluna_publico,
+            nbins=20
+        )
+
+        fig.update_traces(
+            marker_color=COR_HISTOGRAMA
+        )
+
+        fig = aplicar_estilo(fig)
+
+        st.plotly_chart(fig, use_container_width=True)
+
+    # =====================================================
     # TABELA FINAL
     # =====================================================
 
     st.subheader("📄 DADOS OPERACIONAIS")
 
-    pesquisa = st.text_input(
-        "🔎 PESQUISAR NA TABELA"
-    )
+    pesquisa = st.text_input("🔎 PESQUISAR")
 
     tabela = df_filtrado.copy()
 
@@ -762,8 +739,10 @@ try:
         f"✅ DASHBOARD ATUALIZADO EM {horario}"
     )
 
+# =========================================================
+# ERRO
+# =========================================================
+
 except Exception as erro:
 
-    st.error(
-        f"ERRO AO CARREGAR DADOS: {erro}"
-    )
+    st.error(f"ERRO AO CARREGAR DADOS: {erro}")
