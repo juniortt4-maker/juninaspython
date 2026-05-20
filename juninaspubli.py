@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime, date
+from datetime import datetime
 import unicodedata
 import re
 
@@ -34,7 +34,7 @@ st.markdown("""
 
 url = (
     "https://docs.google.com/spreadsheets/d/"
-    "15viHgCiWJR9PUUVL4nKWBPigivYJDTUvUbuo-1O3FS0/"
+    "1U2re0vGfssfUAFzra2oJoIVp4klRsbkpWBXVXSFd2Rs/"
     "export?format=csv&gid=1866688086"
 )
 
@@ -51,6 +51,13 @@ COR_BARRA_UNICA = "#5B8FF9"
 COR_LINHA_1 = "#5B8FF9"
 COR_LINHA_2 = "#61DDAA"
 COR_HISTOGRAMA = "#9CC3FF"
+
+MAPA_MESES = {
+    1: "Jan", 2: "Fev", 3: "Mar", 4: "Abr", 5: "Mai", 6: "Jun",
+    7: "Jul", 8: "Ago", 9: "Set", 10: "Out", 11: "Nov", 12: "Dez"
+}
+
+ORDEM_MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
 
 def caixa_alta(texto):
     return str(texto).upper()
@@ -69,6 +76,11 @@ def carregar_dados():
     return df
 
 def localizar_coluna(colunas, termos):
+    for termo in termos:
+        termo_norm = normalizar_texto(termo)
+        for c in colunas:
+            if termo_norm == normalizar_texto(c):
+                return c
     for termo in termos:
         termo_norm = normalizar_texto(termo)
         for c in colunas:
@@ -214,12 +226,12 @@ try:
     coluna_comando = localizar_coluna(colunas, ["COMANDO"])
     coluna_cidade = localizar_coluna(colunas, ["CIDADE", "MUNICIPIO"])
     coluna_evento = localizar_coluna(colunas, ["EVENTO", "NOME EVENTO"])
-    coluna_publico = localizar_coluna(colunas, ["PUBLICO", "PUBLICO PREVISTO"])
-    coluna_inicio = localizar_coluna(colunas, ["INICIO", "DATA INICIO", "DATA DE INICIO"])
+    coluna_publico = localizar_coluna(colunas, ["PUBLICO", "PÚBLICO", "PUBLICO PREVISTO", "PÚBLICO PREVISTO"])
+    coluna_inicio = localizar_coluna(colunas, ["INICIO", "INÍCIO", "DATA INICIO", "DATA INÍCIO", "DATA DE INICIO"])
     coluna_fim = localizar_coluna(colunas, ["FIM", "DATA FIM", "DATA DE FIM"])
     coluna_natureza = localizar_coluna(colunas, ["NATUREZA"])
-    coluna_tipo_publico = localizar_coluna(colunas, ["TIPO DE PUBLICO", "TIPO PUBLICO"])
-    coluna_cobranca = colunas[19] if len(colunas) > 19 else None
+    coluna_tipo_publico = localizar_coluna(colunas, ["TIPO DE PUBLICO", "TIPO DE PÚBLICO", "TIPO PUBLICO"])
+    coluna_cobranca = localizar_coluna(colunas, ["COBRANCA", "COBRANÇA", "COBRANCA DE INGRESSO", "COBRANÇA DE INGRESSO"])
 
     df = tratar_coluna_numerica(df, coluna_publico)
     df = tratar_coluna_data(df, coluna_inicio)
@@ -231,24 +243,29 @@ try:
     if coluna_cobranca and coluna_cobranca in df.columns:
         df[coluna_cobranca] = df[coluna_cobranca].apply(normalizar_cobranca)
 
-    coluna_data_base = None
-    if coluna_inicio and coluna_inicio in df.columns and df[coluna_inicio].notna().any():
-        coluna_data_base = coluna_inicio
-    elif coluna_fim and coluna_fim in df.columns and df[coluna_fim].notna().any():
-        coluna_data_base = coluna_fim
+    df["DATA_INICIO_BASE"] = pd.NaT
+    df["DATA_FIM_BASE"] = pd.NaT
 
-    if coluna_data_base:
-        df["Ano"] = df[coluna_data_base].dt.year
-        df["Mes_Num"] = df[coluna_data_base].dt.month
+    if coluna_inicio and coluna_inicio in df.columns:
+        df["DATA_INICIO_BASE"] = pd.to_datetime(df[coluna_inicio], errors="coerce", dayfirst=True)
 
-        mapa_meses = {
-            1: "Jan", 2: "Fev", 3: "Mar", 4: "Abr", 5: "Mai", 6: "Jun",
-            7: "Jul", 8: "Ago", 9: "Set", 10: "Out", 11: "Nov", 12: "Dez"
-        }
+    if coluna_fim and coluna_fim in df.columns:
+        df["DATA_FIM_BASE"] = pd.to_datetime(df[coluna_fim], errors="coerce", dayfirst=True)
 
-        df["Mes_Abrev"] = df["Mes_Num"].map(mapa_meses)
-        df["AnoMes"] = df["Ano"].astype("Int64").astype(str) + "-" + df["Mes_Abrev"].fillna("")
-        df.loc[df["Ano"].isna(), "AnoMes"] = None
+    # Base oficial para gráficos temporais: somente INICIO
+    df["DATA_EVENTO_BASE"] = df["DATA_INICIO_BASE"]
+
+    df["Ano"] = df["DATA_EVENTO_BASE"].dt.year
+    df["Mes_Num"] = df["DATA_EVENTO_BASE"].dt.month
+    df["Mes_Abrev"] = df["Mes_Num"].map(MAPA_MESES)
+
+    df["AnoMes"] = pd.NA
+    mask_data_valida = df["DATA_EVENTO_BASE"].notna()
+    df.loc[mask_data_valida, "AnoMes"] = (
+        df.loc[mask_data_valida, "Ano"].astype(int).astype(str)
+        + "-"
+        + df.loc[mask_data_valida, "Mes_Abrev"].astype(str)
+    )
 
     df_historico = preparar_base_eventos(df.copy(), coluna_evento)
     df_filtrado = df.copy()
@@ -257,11 +274,7 @@ try:
 
     if "Ano" in df_filtrado.columns and df_filtrado["Ano"].notna().any():
         opcoes_ano = sorted(df_filtrado["Ano"].dropna().astype(int).unique().tolist())
-        anos_sel = st.sidebar.multiselect(
-            "FILTRAR ANO",
-            options=opcoes_ano,
-            default=[]
-        )
+        anos_sel = st.sidebar.multiselect("FILTRAR ANO", options=opcoes_ano, default=[])
         if anos_sel:
             df_filtrado = df_filtrado[df_filtrado["Ano"].isin(anos_sel)]
 
@@ -283,9 +296,9 @@ try:
         if natureza_sel:
             df_filtrado = df_filtrado[df_filtrado[coluna_natureza].astype(str).isin(natureza_sel)]
 
-    if coluna_inicio and coluna_fim and coluna_inicio in df_filtrado.columns and coluna_fim in df_filtrado.columns:
-        inicio_min = df_filtrado[coluna_inicio].dropna().min() if df_filtrado[coluna_inicio].notna().any() else pd.NaT
-        fim_max = df_filtrado[coluna_fim].dropna().max() if df_filtrado[coluna_fim].notna().any() else pd.NaT
+    if "DATA_INICIO_BASE" in df_filtrado.columns and "DATA_FIM_BASE" in df_filtrado.columns:
+        inicio_min = df_filtrado["DATA_INICIO_BASE"].dropna().min() if df_filtrado["DATA_INICIO_BASE"].notna().any() else pd.NaT
+        fim_max = df_filtrado["DATA_FIM_BASE"].dropna().max() if df_filtrado["DATA_FIM_BASE"].notna().any() else pd.NaT
 
         if pd.notna(inicio_min) and pd.notna(fim_max):
             data_base_min = inicio_min.date()
@@ -303,10 +316,10 @@ try:
                 if data_ini and data_fim_filtro:
                     df_filtrado = df_filtrado[
                         (
-                            df_filtrado[coluna_inicio].dt.date.fillna(data_ini) <= data_fim_filtro
+                            df_filtrado["DATA_INICIO_BASE"].dt.date.fillna(data_ini) <= data_fim_filtro
                         ) &
                         (
-                            df_filtrado[coluna_fim].dt.date.fillna(data_fim_filtro) >= data_ini
+                            df_filtrado["DATA_FIM_BASE"].dt.date.fillna(data_fim_filtro) >= data_ini
                         )
                     ]
 
@@ -363,24 +376,24 @@ try:
         fig = aplicar_estilo(fig)
         st.plotly_chart(fig, use_container_width=True)
 
-    if "Ano" in df_historico.columns and "Mes_Num" in df_historico.columns and df_historico["Ano"].notna().any():
+    if "DATA_EVENTO_BASE" in df_historico.columns and df_historico["DATA_EVENTO_BASE"].notna().any():
         st.markdown("### 📅 COMPARATIVO DE EVENTOS POR MÊS E ANO")
+
+        base_mes = df_historico[df_historico["DATA_EVENTO_BASE"].notna()].copy()
+
         eventos_mes_ano = (
-            df_historico.dropna(subset=["Ano", "Mes_Num", "Mes_Abrev"])
-            .groupby(["Ano", "Mes_Num", "Mes_Abrev"])
+            base_mes.groupby(["Ano", "Mes_Num", "Mes_Abrev"])
             .size()
             .reset_index(name="Eventos")
             .sort_values(["Ano", "Mes_Num"])
         )
 
-        ordem_meses_abrev = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
         eventos_mes_ano["Mes_Abrev"] = pd.Categorical(
             eventos_mes_ano["Mes_Abrev"],
-            categories=ordem_meses_abrev,
+            categories=ORDEM_MESES,
             ordered=True
         )
         eventos_mes_ano["Ano"] = eventos_mes_ano["Ano"].astype(int).astype(str)
-        eventos_mes_ano = eventos_mes_ano.sort_values(["Ano", "Mes_Num"])
 
         fig = px.bar(
             eventos_mes_ano,
@@ -643,16 +656,16 @@ try:
         fig_heat.update_layout(template="simple_white", height=450, margin=dict(l=20, r=20, t=50, b=20))
         st.plotly_chart(fig_heat, use_container_width=True)
 
-    if coluna_data_base and coluna_publico and df_filtrado[coluna_data_base].notna().any():
+    if "DATA_EVENTO_BASE" in df_filtrado.columns and coluna_publico and df_filtrado["DATA_EVENTO_BASE"].notna().any():
         st.subheader("📈 EVOLUÇÃO DO PÚBLICO")
         evolucao = (
-            df_filtrado.dropna(subset=[coluna_data_base])
-            .groupby(coluna_data_base)[coluna_publico]
+            df_filtrado.dropna(subset=["DATA_EVENTO_BASE"])
+            .groupby("DATA_EVENTO_BASE")[coluna_publico]
             .sum()
             .reset_index()
-            .sort_values(coluna_data_base)
+            .sort_values("DATA_EVENTO_BASE")
         )
-        fig = px.line(evolucao, x=coluna_data_base, y=coluna_publico, markers=True, template="simple_white")
+        fig = px.line(evolucao, x="DATA_EVENTO_BASE", y=coluna_publico, markers=True, template="simple_white")
         fig.update_traces(line=dict(color=COR_LINHA_2, width=3), marker=dict(size=8, color=COR_LINHA_2))
         fig.update_layout(xaxis_title="DATA", yaxis_title="PÚBLICO PREVISTO", showlegend=False)
         fig = aplicar_estilo(fig)
