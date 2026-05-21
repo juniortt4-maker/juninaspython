@@ -22,10 +22,12 @@ st.set_page_config(
 st.markdown("""
 <div style="
     color: #E5E7EB;
-    font-size: 1.6rem;
+    font-family: inherit;
+    font-size: 2.2rem;
     font-weight: 800;
     line-height: 1.2;
-    margin-bottom: 0.6rem;
+    margin: 0 0 0.8rem 0;
+    padding: 0;
 ">
     🚔 OPERAÇÃO SÃO JOÃO
 </div>
