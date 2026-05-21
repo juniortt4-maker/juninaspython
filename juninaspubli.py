@@ -10,7 +10,7 @@ import re
 # =========================================================
 
 st.set_page_config(
-    page_title="OPERAÇÃO SÃO JOÃO",
+    page_title="OPERAÇÃO SÃO JOÃO 2026",
     page_icon="🚔",
     layout="wide"
 )
@@ -29,7 +29,7 @@ st.markdown("""
     margin: 0 0 0.8rem 0;
     padding: 0;
 ">
-    🚔 OPERAÇÃO SÃO JOÃO
+    🚔 OPERAÇÃO SÃO JOÃO 2026
 </div>
 """, unsafe_allow_html=True)
 
