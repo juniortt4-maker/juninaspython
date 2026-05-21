@@ -534,25 +534,52 @@ try:
     if coluna_evento and coluna_publico:
         st.subheader("🎯 EVENTOS COM MAIOR PÚBLICO PREVISTO")
 
-        top_eventos = (
-            df_filtrado.groupby(coluna_evento)[coluna_publico]
-            .sum()
-            .reset_index()
-            .sort_values(by=coluna_publico, ascending=False)
-            .head(10)
+        eventos_publico = (
+            df_filtrado
+            .dropna(subset=[coluna_evento, coluna_publico])
+            .copy()
         )
 
-        fig = px.bar(
-            top_eventos,
-            x=coluna_evento,
-            y=coluna_publico,
-            color=coluna_evento,
-            text_auto=".2s",
-            color_discrete_sequence=PALETA_BARRAS
+        eventos_publico[coluna_publico] = pd.to_numeric(
+            eventos_publico[coluna_publico], errors="coerce"
         )
-        fig.update_yaxes(tickformat=",d")
-        fig = aplicar_estilo(fig)
-        st.plotly_chart(fig, use_container_width=True)
+
+        eventos_publico = (
+            eventos_publico
+            .dropna(subset=[coluna_publico])
+            .sort_values(by=coluna_publico, ascending=False)
+            .drop_duplicates(subset=[coluna_evento], keep="first")
+            .head(10)
+            .copy()
+        )
+
+        if not eventos_publico.empty:
+            eventos_publico["categoria_cor"] = eventos_publico[coluna_evento].astype(str)
+
+            fig = px.bar(
+                eventos_publico,
+                x=coluna_publico,
+                y=coluna_evento,
+                orientation="h",
+                color="categoria_cor",
+                text=coluna_publico,
+                color_discrete_sequence=PALETA_BARRAS
+            )
+
+            fig.update_traces(textposition="outside")
+            fig = aplicar_estilo(fig)
+
+            fig.update_layout(
+                showlegend=False,
+                xaxis_title="Público Previsto",
+                yaxis_title="Evento",
+                yaxis=dict(
+                    dtick=1,
+                    categoryorder="total ascending"
+                )
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
 
     # =====================================================
     # HISTOGRAMA
