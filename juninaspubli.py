@@ -10,72 +10,24 @@ import re
 # =========================================================
 
 st.set_page_config(
-    page_title="OPERAÇÃO - SÃO JOÃO 2026",
+    page_title="OPERAÇÃO SÃO JOÃO",
     page_icon="🚔",
     layout="wide"
 )
 
-st.markdown("""
-<style>
-    .stApp {
-        background: #0B0F14;
-    }
-
-    .block-container {
-        padding-top: 0.25rem;
-        max-width: 100%;
-    }
-
-    .titulo-wrap {
-        display: block;
-        width: 100%;
-        overflow: visible !important;
-        padding-bottom: 0.45rem;
-        margin-bottom: 0.25rem;
-    }
-
-    .titulo-linha {
-        display: block;
-        width: 100%;
-        color: #E5E7EB;
-        font-size: clamp(1.00rem, 1.8vw, 1.70rem);
-        font-weight: 800;
-        line-height: 1.38 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        white-space: normal !important;
-        overflow-wrap: anywhere !important;
-        word-break: break-word !important;
-        overflow: visible !important;
-    }
-
-    .subtitulo-linha {
-        display: block;
-        width: 100%;
-        color: #94A3B8;
-        font-size: 0.92rem;
-        line-height: 1.45;
-        margin-top: 0.12rem;
-        white-space: normal !important;
-    }
-
-    h1, h2, h3 {
-        color: #E5E7EB;
-        letter-spacing: -0.2px;
-    }
-
-    .stCaption {
-        color: #94A3B8 !important;
-        font-size: 0.88rem !important;
-    }
-</style>
-""", unsafe_allow_html=True)
+# =========================================================
+# AJUSTE APENAS DO TÍTULO
+# =========================================================
 
 st.markdown("""
-<div class="titulo-wrap">
-    <div class="titulo-linha">🚔 OPERAÇÃO - SÃO JOÃO</div>
-    <div class="titulo-linha">2026</div>
-    <div class="subtitulo-linha">Painel operacional com panorama histórico fixo e análises filtráveis.</div>
+<div style="
+    color: #E5E7EB;
+    font-size: 1.6rem;
+    font-weight: 800;
+    line-height: 1.2;
+    margin-bottom: 0.6rem;
+">
+    🚔 OPERAÇÃO SÃO JOÃO
 </div>
 """, unsafe_allow_html=True)
 
@@ -131,13 +83,6 @@ def limpar_categoria(valor):
         return pd.NA
     valor = re.sub(r"\s+", " ", valor)
     return valor.upper()
-
-@st.cache_data(ttl=60)
-def carregar_dados():
-    df = pd.read_csv(url)
-    df = df.dropna(how="all")
-    df.columns = [str(c).strip() for c in df.columns]
-    return df
 
 def localizar_coluna(colunas, termos):
     for termo in termos:
@@ -242,6 +187,13 @@ def aplicar_estilo(fig):
     )
     return fig
 
+@st.cache_data(ttl=60)
+def carregar_dados():
+    df = pd.read_csv(url)
+    df = df.dropna(how="all")
+    df.columns = [str(c).strip() for c in df.columns]
+    return df
+
 # =========================================================
 # INÍCIO
 # =========================================================
@@ -297,13 +249,8 @@ try:
 
     total_linhas_original = len(df_original)
 
-    # Mantém todo registro com J válida
     df = df[df["DATA_INICIO_BASE"].notna()].copy()
-
-    # Se K vier vazia, assume o próprio início
     df["DATA_FIM_BASE"] = df["DATA_FIM_BASE"].fillna(df["DATA_INICIO_BASE"])
-
-    # Segurança: fim nunca menor que início
     df.loc[df["DATA_FIM_BASE"] < df["DATA_INICIO_BASE"], "DATA_FIM_BASE"] = df["DATA_INICIO_BASE"]
 
     df["Ano"] = df["DATA_EVENTO_BASE"].dt.year.astype("Int64")
@@ -409,10 +356,6 @@ try:
         st.markdown("### Eventos por mês")
         st.dataframe(resumo_meses, use_container_width=True)
 
-        st.markdown("### Amostra das datas válidas")
-        amostra_datas = df[[coluna_inicio, coluna_fim, "Ano", "Mes_Num", "Mes_Abrev"]].copy().head(30)
-        st.dataframe(amostra_datas, use_container_width=True)
-
     # =====================================================
     # PANORAMA GERAL
     # =====================================================
@@ -426,16 +369,20 @@ try:
         .reset_index(name="Eventos")
         .sort_values("Ano")
     )
+
     eventos_ano["Ano"] = eventos_ano["Ano"].astype(int).astype(str)
+    eventos_ano["Eventos_txt"] = eventos_ano["Eventos"].astype(int).astype(str)
 
     fig_ano = px.bar(
         eventos_ano,
         x="Ano",
         y="Eventos",
-        text_auto=True,
+        text="Eventos_txt",
         color="Ano",
         color_discrete_sequence=PALETA_BARRAS
     )
+
+    fig_ano.update_traces(textposition="outside")
     fig_ano.update_xaxes(type="category", categoryorder="category ascending")
     fig_ano.update_yaxes(tickformat=",d")
     fig_ano = aplicar_estilo(fig_ano)
