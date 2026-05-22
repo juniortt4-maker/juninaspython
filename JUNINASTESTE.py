@@ -16,6 +16,16 @@ st.set_page_config(
 )
 
 # =========================================================
+# FORÇAR IDIOMA PORTUGUÊS NO FRONT
+# =========================================================
+
+st.markdown("""
+<script>
+document.documentElement.lang = "pt-BR";
+</script>
+""", unsafe_allow_html=True)
+
+# =========================================================
 # AJUSTE APENAS DO TÍTULO
 # =========================================================
 
@@ -59,6 +69,7 @@ PALETA_PIZZA = [
     "#008685", "#9661BC"
 ]
 
+COR_PADRAO_BARRA = "#5B8FF9"
 COR_LINHA_2 = "#61DDAA"
 COR_HISTOGRAMA = "#9CC3FF"
 
@@ -213,10 +224,10 @@ try:
 
     colunas = df.columns.tolist()
 
-    coluna_cpr = df.columns[2]      # C
-    coluna_upm = df.columns[3]      # D
-    coluna_inicio = df.columns[9]   # J
-    coluna_fim = df.columns[10]     # K
+    coluna_cpr = df.columns[2]
+    coluna_upm = df.columns[3]
+    coluna_inicio = df.columns[9]
+    coluna_fim = df.columns[10]
 
     coluna_comando = localizar_coluna(colunas, ["COMANDO"])
     coluna_cidade = localizar_coluna(colunas, ["CIDADE", "MUNICIPIO"])
@@ -268,6 +279,7 @@ try:
     df["Ano"] = df["DATA_EVENTO_BASE"].dt.year.astype("Int64")
     df["Mes_Num"] = df["DATA_EVENTO_BASE"].dt.month.astype("Int64")
     df["Mes_Abrev"] = df["Mes_Num"].map(MAPA_MESES)
+    df["Hora"] = df["DATA_INICIO_BASE"].dt.hour.astype("Int64")
 
     df = df[df["Ano"].notna()].copy()
     df = df[df["Ano"] != 2022].copy()
@@ -281,7 +293,7 @@ try:
     st.sidebar.subheader("🎯 FILTROS")
 
     anos = sorted(df_filtrado["Ano"].dropna().astype(int).unique().tolist())
-    anos_sel = st.sidebar.multiselect("FILTRAR ANO", options=anos, default=[])
+    anos_sel = st.sidebar.multiselect("FILTRAR ANO", options=anos, default=[2026] if 2026 in anos else [])
     if anos_sel:
         df_filtrado = df_filtrado[df_filtrado["Ano"].isin(anos_sel)]
 
@@ -323,7 +335,8 @@ try:
             "FILTRAR PERÍODO",
             value=(data_min, data_max),
             min_value=data_min,
-            max_value=data_max
+            max_value=data_max,
+            format="DD/MM/YYYY"
         )
 
         if isinstance(intervalo, (tuple, list)) and len(intervalo) == 2:
@@ -335,6 +348,13 @@ try:
 
     if df_filtrado.empty:
         st.warning("NENHUM REGISTRO ENCONTRADO.")
+        st.stop()
+
+    # FIXAR 2026 A PARTIR DE EVENTOS POR CPR
+    df_2026 = df_filtrado[df_filtrado["Ano"] == 2026].copy()
+
+    if df_2026.empty:
+        st.warning("NÃO HÁ DADOS DE 2026 PARA EXIBIR OS GRÁFICOS OPERACIONAIS.")
         st.stop()
 
     # =====================================================
@@ -410,7 +430,7 @@ try:
     fig_ano.update_xaxes(type="category", categoryorder="category ascending")
     fig_ano.update_yaxes(tickformat=",d")
     fig_ano = aplicar_estilo(fig_ano)
-    st.plotly_chart(fig_ano, use_container_width=True)
+    st.plotly_chart(fig_ano, use_container_width=True, config={"locale": "pt-BR"})
 
     st.markdown("### 📅 COMPARATIVO ANO/MÊS")
     eventos_mes = (
@@ -419,6 +439,7 @@ try:
         .reset_index(name="Eventos")
         .sort_values(["Ano", "Mes_Num"])
     )
+
     eventos_mes = eventos_mes[eventos_mes["Eventos"] > 0].copy()
     eventos_mes = eventos_mes[eventos_mes["Mes_Num"].notna()].copy()
 
@@ -445,7 +466,7 @@ try:
         fig_mes.update_xaxes(categoryorder="array", categoryarray=ordem_meses_existentes)
         fig_mes.update_yaxes(tickformat=",d")
         fig_mes = aplicar_estilo(fig_mes)
-        st.plotly_chart(fig_mes, use_container_width=True)
+        st.plotly_chart(fig_mes, use_container_width=True, config={"locale": "pt-BR"})
 
     # =====================================================
     # INDICADORES
@@ -453,12 +474,12 @@ try:
 
     st.subheader("📌 INDICADORES OPERACIONAIS")
 
-    total_eventos = int(df_filtrado["_ID_LINHA_EVENTO_"].count())
-    total_publico = int(df_filtrado[coluna_publico].fillna(0).sum()) if coluna_publico else 0
-    total_cidades = df_filtrado[coluna_cidade].dropna().nunique() if coluna_cidade else 0
-    total_comandos = df_filtrado[coluna_comando].dropna().nunique() if coluna_comando else 0
-    total_cprs = df_filtrado[coluna_cpr].dropna().nunique() if coluna_cpr else 0
-    total_upms = df_filtrado[coluna_upm].dropna().nunique() if coluna_upm else 0
+    total_eventos = int(df_2026["_ID_LINHA_EVENTO_"].count())
+    total_publico = int(df_2026[coluna_publico].fillna(0).sum()) if coluna_publico else 0
+    total_cidades = df_2026[coluna_cidade].dropna().nunique() if coluna_cidade else 0
+    total_comandos = df_2026[coluna_comando].dropna().nunique() if coluna_comando else 0
+    total_cprs = df_2026[coluna_cpr].dropna().nunique() if coluna_cpr else 0
+    total_upms = df_2026[coluna_upm].dropna().nunique() if coluna_upm else 0
 
     c1, c2, c3, c4, c5, c6 = st.columns(6)
     c1.metric("🎉 EVENTOS", total_eventos)
@@ -469,14 +490,14 @@ try:
     c6.metric("🏢 UPM", total_upms)
 
     # =====================================================
-    # EVENTOS POR CPR
+    # EVENTOS POR CPR - FIXO 2026
     # =====================================================
 
     if coluna_cpr:
         st.subheader("🛡️ EVENTOS POR CPR")
 
         cpr_df = (
-            df_filtrado[df_filtrado[coluna_cpr].notna()]
+            df_2026[df_2026[coluna_cpr].notna()]
             .groupby(coluna_cpr)["_ID_LINHA_EVENTO_"]
             .count()
             .reset_index(name="Eventos")
@@ -503,17 +524,17 @@ try:
             )
             fig_cpr.update_xaxes(tickformat=",d")
             fig_cpr = aplicar_estilo(fig_cpr)
-            st.plotly_chart(fig_cpr, use_container_width=True)
+            st.plotly_chart(fig_cpr, use_container_width=True, config={"locale": "pt-BR"})
 
     # =====================================================
-    # EVENTOS POR UPM
+    # EVENTOS POR UPM - FIXO 2026 E MESMA COR
     # =====================================================
 
     if coluna_upm:
         st.subheader("🏢 EVENTOS POR UPM")
 
         upm_df = (
-            df_filtrado[df_filtrado[coluna_upm].notna()]
+            df_2026[df_2026[coluna_upm].notna()]
             .groupby(coluna_upm)["_ID_LINHA_EVENTO_"]
             .count()
             .reset_index(name="Eventos")
@@ -521,8 +542,6 @@ try:
         )
 
         if not upm_df.empty:
-            upm_df["categoria_cor"] = upm_df[coluna_upm].astype(str)
-
             altura_upm = max(500, len(upm_df) * 45)
 
             fig_upm = px.bar(
@@ -530,12 +549,14 @@ try:
                 x="Eventos",
                 y=coluna_upm,
                 orientation="h",
-                color="categoria_cor",
-                text="Eventos",
-                color_discrete_sequence=PALETA_BARRAS
+                text="Eventos"
             )
 
-            fig_upm.update_traces(textposition="outside")
+            fig_upm.update_traces(
+                textposition="outside",
+                marker_color=COR_PADRAO_BARRA
+            )
+
             fig_upm = aplicar_estilo(fig_upm)
 
             fig_upm.update_layout(
@@ -552,17 +573,16 @@ try:
             )
 
             fig_upm.update_xaxes(tickformat=",d")
-
-            st.plotly_chart(fig_upm, use_container_width=True)
+            st.plotly_chart(fig_upm, use_container_width=True, config={"locale": "pt-BR"})
 
     # =====================================================
-    # EVENTOS POR NATUREZA
+    # EVENTOS POR NATUREZA - FIXO 2026
     # =====================================================
 
     if coluna_natureza:
         st.subheader("🎭 EVENTOS POR NATUREZA")
 
-        base_natureza = df_filtrado[df_filtrado[coluna_natureza].notna()].copy()
+        base_natureza = df_2026[df_2026[coluna_natureza].notna()].copy()
 
         natureza_df = (
             base_natureza.groupby(coluna_natureza)["_ID_LINHA_EVENTO_"]
@@ -585,17 +605,17 @@ try:
                 hovertemplate="<b>%{label}</b><br>Eventos: %{value}<br>Percentual: %{percent}<extra></extra>"
             )
             fig_nat = aplicar_estilo(fig_nat)
-            st.plotly_chart(fig_nat, use_container_width=True)
+            st.plotly_chart(fig_nat, use_container_width=True, config={"locale": "pt-BR"})
 
     # =====================================================
-    # EVENTOS POR COMANDO
+    # EVENTOS POR COMANDO - FIXO 2026
     # =====================================================
 
     if coluna_comando:
         st.subheader("🚔 EVENTOS POR COMANDO")
 
         comando_df = (
-            df_filtrado.groupby(coluna_comando)["_ID_LINHA_EVENTO_"]
+            df_2026.groupby(coluna_comando)["_ID_LINHA_EVENTO_"]
             .count()
             .reset_index(name="Eventos")
             .sort_values(by="Eventos", ascending=False)
@@ -611,97 +631,16 @@ try:
         )
         fig.update_yaxes(tickformat=",d")
         fig = aplicar_estilo(fig)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, config={"locale": "pt-BR"})
 
-    # =====================================================
-    # CIDADES
-    # =====================================================
-
-    if coluna_cidade:
-        st.subheader("🏙️ CIDADES COM MAIS EVENTOS")
-
-        cidade_df = (
-            df_filtrado.groupby(coluna_cidade)["_ID_LINHA_EVENTO_"]
-            .count()
-            .reset_index(name="Eventos")
-            .sort_values(by="Eventos", ascending=False)
-            .head(15)
-        )
-
-        fig = px.bar(
-            cidade_df,
-            x=coluna_cidade,
-            y="Eventos",
-            color=coluna_cidade,
-            text_auto=True,
-            color_discrete_sequence=PALETA_BARRAS
-        )
-        fig.update_yaxes(tickformat=",d")
-        fig = aplicar_estilo(fig)
-        st.plotly_chart(fig, use_container_width=True)
-
-    # =====================================================
-    # TOP EVENTOS POR PÚBLICO
-    # =====================================================
-
-    if coluna_evento and coluna_publico:
-        st.subheader("🎯 EVENTOS COM MAIOR PÚBLICO PREVISTO")
-
-        eventos_publico = (
-            df_filtrado
-            .dropna(subset=[coluna_evento, coluna_publico])
-            .copy()
-        )
-
-        eventos_publico[coluna_publico] = pd.to_numeric(
-            eventos_publico[coluna_publico], errors="coerce"
-        )
-
-        eventos_publico = (
-            eventos_publico
-            .dropna(subset=[coluna_publico])
-            .sort_values(by=coluna_publico, ascending=False)
-            .drop_duplicates(subset=[coluna_evento], keep="first")
-            .head(10)
-            .copy()
-        )
-
-        if not eventos_publico.empty:
-            eventos_publico["categoria_cor"] = eventos_publico[coluna_evento].astype(str)
-
-            fig = px.bar(
-                eventos_publico,
-                x=coluna_publico,
-                y=coluna_evento,
-                orientation="h",
-                color="categoria_cor",
-                text=coluna_publico,
-                color_discrete_sequence=PALETA_BARRAS
-            )
-
-            fig.update_traces(textposition="outside")
-            fig = aplicar_estilo(fig)
-
-            fig.update_layout(
-                showlegend=False,
-                xaxis_title="Público Previsto",
-                yaxis_title="Evento",
-                yaxis=dict(
-                    dtick=1,
-                    categoryorder="total ascending"
-                )
-            )
-
-            st.plotly_chart(fig, use_container_width=True)
-
-    # =====================================================
-    # HISTOGRAMA
+        # =====================================================
+    # HISTOGRAMA - FIXO 2026
     # =====================================================
 
     if coluna_publico:
         st.subheader("📊 DISTRIBUIÇÃO DO PÚBLICO")
 
-        base_publico = df_filtrado[df_filtrado[coluna_publico].notna()].copy()
+        base_publico = df_2026[df_2026[coluna_publico].notna()].copy()
 
         if not base_publico.empty:
             fig = px.histogram(
@@ -712,17 +651,17 @@ try:
             fig.update_traces(marker_color=COR_HISTOGRAMA)
             fig.update_yaxes(tickformat=",d")
             fig = aplicar_estilo(fig)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config={"locale": "pt-BR"})
 
     # =====================================================
-    # EVOLUÇÃO
+    # EVOLUÇÃO DO PÚBLICO - FIXO 2026
     # =====================================================
 
-    if coluna_publico and df_filtrado["DATA_EVENTO_BASE"].notna().any():
+    if coluna_publico and df_2026["DATA_EVENTO_BASE"].notna().any():
         st.subheader("📈 EVOLUÇÃO DO PÚBLICO")
 
         evolucao = (
-            df_filtrado.groupby("DATA_EVENTO_BASE")[coluna_publico]
+            df_2026.groupby("DATA_EVENTO_BASE")[coluna_publico]
             .sum()
             .reset_index()
             .sort_values("DATA_EVENTO_BASE")
@@ -737,20 +676,56 @@ try:
         fig.update_traces(line=dict(color=COR_LINHA_2, width=3))
         fig.update_yaxes(tickformat=",d")
         fig = aplicar_estilo(fig)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, config={"locale": "pt-BR"})
 
     # =====================================================
-    # MAPA DE CALOR - HORÁRIO X PÚBLICO PREVISTO
+    # NOVO GRÁFICO - EVOLUÇÃO DA QUANTIDADE DE EVENTOS POR HORA
     # =====================================================
 
-    if coluna_publico and df_filtrado["DATA_INICIO_BASE"].notna().any():
+    if df_2026["Hora"].notna().any():
+        st.subheader("⏰ EVOLUÇÃO DA QUANTIDADE DE EVENTOS POR HORA")
+
+        eventos_hora = (
+            df_2026[df_2026["Hora"].notna()]
+            .groupby("Hora")["_ID_LINHA_EVENTO_"]
+            .count()
+            .reset_index(name="Quantidade de Eventos")
+            .sort_values("Hora")
+        )
+
+        horas_base = pd.DataFrame({"Hora": list(range(24))})
+        eventos_hora = horas_base.merge(eventos_hora, on="Hora", how="left").fillna(0)
+        eventos_hora["Quantidade de Eventos"] = eventos_hora["Quantidade de Eventos"].astype(int)
+        eventos_hora["Hora_Label"] = eventos_hora["Hora"].apply(lambda x: f"{int(x):02d}:00")
+
+        fig_eventos_hora = px.line(
+            eventos_hora,
+            x="Hora_Label",
+            y="Quantidade de Eventos",
+            markers=True
+        )
+
+        fig_eventos_hora.update_traces(line=dict(color="#5B8FF9", width=3))
+        fig_eventos_hora.update_yaxes(tickformat=",d")
+        fig_eventos_hora.update_layout(
+            xaxis_title="Hora do Dia",
+            yaxis_title="Quantidade de Eventos"
+        )
+        fig_eventos_hora = aplicar_estilo(fig_eventos_hora)
+        st.plotly_chart(fig_eventos_hora, use_container_width=True, config={"locale": "pt-BR"})
+
+    # =====================================================
+    # MAPA DE CALOR - HORÁRIO X PÚBLICO PREVISTO - FIXO 2026
+    # =====================================================
+
+    if coluna_publico and df_2026["DATA_INICIO_BASE"].notna().any():
         st.subheader("🕒 MAPA DE CALOR - HORÁRIO X PÚBLICO PREVISTO")
 
         base_calor = (
-            df_filtrado[
-                df_filtrado["DATA_INICIO_BASE"].notna() &
-                df_filtrado["DATA_FIM_BASE"].notna() &
-                df_filtrado[coluna_publico].notna()
+            df_2026[
+                df_2026["DATA_INICIO_BASE"].notna() &
+                df_2026["DATA_FIM_BASE"].notna() &
+                df_2026[coluna_publico].notna()
             ]
             .copy()
         )
@@ -780,7 +755,7 @@ try:
                         "Dia_Semana_Num": dt_ref.weekday(),
                         "Dia_Semana": DIAS_SEMANA[dt_ref.weekday()],
                         "Hora": dt_ref.hour,
-                        "Publico": float(publico)
+                        "Valor": float(publico)
                     })
 
             heatmap_df = pd.DataFrame(registros_heatmap)
@@ -794,7 +769,7 @@ try:
                 )
 
                 heatmap_resumo = (
-                    heatmap_df.groupby(["Dia_Semana_Num", "Dia_Semana", "Hora"])["Publico"]
+                    heatmap_df.groupby(["Dia_Semana_Num", "Dia_Semana", "Hora"])["Valor"]
                     .sum()
                     .reset_index()
                     .sort_values(["Dia_Semana_Num", "Hora"])
@@ -804,7 +779,7 @@ try:
                     heatmap_resumo.pivot(
                         index="Dia_Semana",
                         columns="Hora",
-                        values="Publico"
+                        values="Valor"
                     )
                     .reindex(dias_ordem)
                     .fillna(0)
@@ -824,17 +799,102 @@ try:
                 )
 
                 fig_heat = aplicar_estilo(fig_heat)
-                st.plotly_chart(fig_heat, use_container_width=True)
+                st.plotly_chart(fig_heat, use_container_width=True, config={"locale": "pt-BR"})
 
     # =====================================================
-    # TOP 10
+    # NOVO MAPA DE CALOR - HORÁRIO X QUANTIDADE DE EVENTOS
+    # =====================================================
+
+    if df_2026["DATA_INICIO_BASE"].notna().any():
+        st.subheader("🗓️ MAPA DE CALOR - HORÁRIO X QUANTIDADE DE EVENTOS")
+
+        base_calor_eventos = (
+            df_2026[
+                df_2026["DATA_INICIO_BASE"].notna() &
+                df_2026["DATA_FIM_BASE"].notna()
+            ]
+            .copy()
+        )
+
+        if not base_calor_eventos.empty:
+            registros_heatmap_eventos = []
+
+            for _, row in base_calor_eventos.iterrows():
+                inicio = row["DATA_INICIO_BASE"]
+                fim = row["DATA_FIM_BASE"]
+
+                if pd.isna(inicio) or pd.isna(fim):
+                    continue
+
+                if fim < inicio:
+                    fim = inicio
+
+                horas_intervalo = pd.date_range(
+                    start=inicio.floor("h"),
+                    end=fim.floor("h"),
+                    freq="h"
+                )
+
+                for dt_ref in horas_intervalo:
+                    registros_heatmap_eventos.append({
+                        "Dia_Semana_Num": dt_ref.weekday(),
+                        "Dia_Semana": DIAS_SEMANA[dt_ref.weekday()],
+                        "Hora": dt_ref.hour,
+                        "Quantidade_Eventos": 1
+                    })
+
+            heatmap_eventos_df = pd.DataFrame(registros_heatmap_eventos)
+
+            if not heatmap_eventos_df.empty:
+                dias_ordem = (
+                    heatmap_eventos_df[["Dia_Semana_Num", "Dia_Semana"]]
+                    .drop_duplicates()
+                    .sort_values("Dia_Semana_Num")["Dia_Semana"]
+                    .tolist()
+                )
+
+                heatmap_eventos_resumo = (
+                    heatmap_eventos_df.groupby(["Dia_Semana_Num", "Dia_Semana", "Hora"])["Quantidade_Eventos"]
+                    .sum()
+                    .reset_index()
+                    .sort_values(["Dia_Semana_Num", "Hora"])
+                )
+
+                matriz_eventos = (
+                    heatmap_eventos_resumo.pivot(
+                        index="Dia_Semana",
+                        columns="Hora",
+                        values="Quantidade_Eventos"
+                    )
+                    .reindex(dias_ordem)
+                    .fillna(0)
+                )
+
+                fig_heat_eventos = px.imshow(
+                    matriz_eventos,
+                    aspect="auto",
+                    color_continuous_scale="Blues",
+                    text_auto=".0f"
+                )
+
+                fig_heat_eventos.update_layout(
+                    xaxis_title="Hora do Dia",
+                    yaxis_title="Dia da Semana",
+                    coloraxis_colorbar_title="Qtd. Eventos"
+                )
+
+                fig_heat_eventos = aplicar_estilo(fig_heat_eventos)
+                st.plotly_chart(fig_heat_eventos, use_container_width=True, config={"locale": "pt-BR"})
+
+    # =====================================================
+    # TOP 10 - FIXO 2026
     # =====================================================
 
     if coluna_publico:
         st.subheader("🔥 TOP 10 - PÚBLICO PREVISTO")
 
         top_publico = (
-            df_filtrado[df_filtrado[coluna_publico].notna()]
+            df_2026[df_2026[coluna_publico].notna()]
             .sort_values(by=coluna_publico, ascending=False)
             .head(10)
         )
@@ -842,16 +902,16 @@ try:
         st.dataframe(top_publico, use_container_width=True)
 
     # =====================================================
-    # ANÁLISE INTELIGENTE
+    # ANÁLISE INTELIGENTE - FIXO 2026
     # =====================================================
 
     st.subheader("🧠 ANÁLISE INTELIGENTE OPERACIONAL")
 
-    if coluna_publico and not df_filtrado[coluna_publico].dropna().empty:
-        maior_publico = df_filtrado.loc[df_filtrado[coluna_publico].idxmax()]
-        menor_publico = df_filtrado.loc[df_filtrado[coluna_publico].idxmin()]
-        media_geral = round(df_filtrado[coluna_publico].mean(), 2)
-        mediana = round(df_filtrado[coluna_publico].median(), 2)
+    if coluna_publico and not df_2026[coluna_publico].dropna().empty:
+        maior_publico = df_2026.loc[df_2026[coluna_publico].idxmax()]
+        menor_publico = df_2026.loc[df_2026[coluna_publico].idxmin()]
+        media_geral = round(df_2026[coluna_publico].mean(), 2)
+        mediana = round(df_2026[coluna_publico].median(), 2)
 
         nome_maior = maior_publico[coluna_evento] if coluna_evento else "N/D"
         nome_menor = menor_publico[coluna_evento] if coluna_evento else "N/D"
@@ -886,14 +946,14 @@ try:
 """)
 
     # =====================================================
-    # RANKING OPERACIONAL
+    # RANKING OPERACIONAL - FIXO 2026
     # =====================================================
 
     if coluna_comando and coluna_publico:
         st.subheader("🏆 RANKING OPERACIONAL DOS COMANDOS")
 
         ranking = (
-            df_filtrado.groupby(coluna_comando)[coluna_publico]
+            df_2026.groupby(coluna_comando)[coluna_publico]
             .agg(["sum", "mean", "count"])
             .reset_index()
         )
@@ -909,14 +969,14 @@ try:
         st.dataframe(ranking, use_container_width=True)
 
     # =====================================================
-    # EVENTOS POR TIPO DE PÚBLICO
+    # EVENTOS POR TIPO DE PÚBLICO - FIXO 2026
     # =====================================================
 
     if coluna_tipo_publico:
         st.subheader("👥 EVENTOS POR TIPO DE PÚBLICO")
 
         tipo_publico_df = (
-            df_filtrado[df_filtrado[coluna_tipo_publico].notna()]
+            df_2026[df_2026[coluna_tipo_publico].notna()]
             .groupby(coluna_tipo_publico)["_ID_LINHA_EVENTO_"]
             .count()
             .reset_index(name="Eventos")
@@ -934,19 +994,19 @@ try:
             )
             fig.update_yaxes(tickformat=",d")
             fig = aplicar_estilo(fig)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config={"locale": "pt-BR"})
 
     # =====================================================
-    # NATUREZA POR COMANDO
+    # NATUREZA POR COMANDO - FIXO 2026
     # =====================================================
 
     if coluna_comando and coluna_natureza:
         st.subheader("🗂️ NATUREZA POR COMANDO")
 
         nat_comando = (
-            df_filtrado[
-                df_filtrado[coluna_natureza].notna() &
-                df_filtrado[coluna_comando].notna()
+            df_2026[
+                df_2026[coluna_natureza].notna() &
+                df_2026[coluna_comando].notna()
             ]
             .groupby([coluna_comando, coluna_natureza])["_ID_LINHA_EVENTO_"]
             .count()
@@ -964,16 +1024,16 @@ try:
             )
             fig.update_yaxes(tickformat=",d")
             fig = aplicar_estilo(fig)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config={"locale": "pt-BR"})
 
     # =====================================================
-    # TABELA FINAL
+    # TABELA FINAL - FIXO 2026
     # =====================================================
 
     st.subheader("📄 DADOS OPERACIONAIS")
 
     pesquisa = st.text_input("🔎 PESQUISAR NA TABELA")
-    tabela = df_filtrado.copy()
+    tabela = df_2026.copy()
 
     if pesquisa:
         tabela = tabela[
@@ -993,7 +1053,7 @@ try:
     st.download_button(
         label="⬇️ BAIXAR CSV",
         data=csv,
-        file_name="operacao_sao_joao.csv",
+        file_name="operacao_sao_joao_2026.csv",
         mime="text/csv"
     )
 
