@@ -1209,42 +1209,21 @@ try:
             fig.update_yaxes(tickformat=",d")
             fig = aplicar_estilo(fig)
             st.plotly_chart(fig, use_container_width=True, config={"locale": "pt-BR"})
-
-    # =====================================================
-    # TABELA FINAL - FIXO 2026
-    # =====================================================
-
-    st.subheader("📄 DADOS OPERACIONAIS")
-
-    pesquisa = st.text_input("🔎 PESQUISAR NA TABELA")
-    tabela = df_2026.copy()
-
-    if pesquisa:
-        tabela = tabela[
-            tabela.astype(str)
-            .apply(lambda x: x.str.contains(pesquisa, case=False, na=False))
-            .any(axis=1)
-        ]
-
-    st.dataframe(
-        tabela.style.apply(lambda row: definir_cor_linha(row, coluna_upm), axis=1),
-        use_container_width=True,
-        height=450
-    )
-    # =====================================================
-    # TABELA - DADOS DE TRÂNSITO (SOMENTE DETRAN)
-    # =====================================================
+            
+        # =====================================================
+        # TABELA - DADOS DE TRÂNSITO (SOMENTE DETRAN)
+        # =====================================================
 
     st.subheader("🚦 DADOS DE TRÂNSITO - DETRAN")
 
     if len(df_2026.columns) > 12:
-        coluna_transito = df_2026.columns[12]   # Coluna M
-        col_a = df_2026.columns[0]              # Coluna A
-        col_c = df_2026.columns[2]              # Coluna C
-        col_d = df_2026.columns[3]              # Coluna D
-        col_g = df_2026.columns[6]              # Coluna G
-        col_h = df_2026.columns[7]              # Coluna H
-        col_i = df_2026.columns[8]              # Coluna I
+        coluna_transito = df_2026.columns[12]  # Coluna M
+        col_a = df_2026.columns[0]  # Coluna A
+        col_c = df_2026.columns[2]  # Coluna C
+        col_d = df_2026.columns[3]  # Coluna D
+        col_g = df_2026.columns[6]  # Coluna G
+        col_h = df_2026.columns[7]  # Coluna H
+        col_i = df_2026.columns[8]  # Coluna I
 
         tabela_transito = df_2026.copy()
 
@@ -1277,6 +1256,29 @@ try:
             )
     else:
         st.warning("A planilha não possui a coluna M disponível.")
+        
+    # =====================================================
+    # TABELA FINAL - FIXO 2026
+    # =====================================================
+
+    st.subheader("📄 DADOS OPERACIONAIS")
+
+    pesquisa = st.text_input("🔎 PESQUISAR NA TABELA")
+    tabela = df_2026.copy()
+
+    if pesquisa:
+        tabela = tabela[
+            tabela.astype(str)
+            .apply(lambda x: x.str.contains(pesquisa, case=False, na=False))
+            .any(axis=1)
+        ]
+
+    st.dataframe(
+        tabela.style.apply(lambda row: definir_cor_linha(row, coluna_upm), axis=1),
+        use_container_width=True,
+        height=450
+    )
+
     # =====================================================
     # DOWNLOAD
     # =====================================================
