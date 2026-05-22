@@ -4,6 +4,7 @@ import plotly.express as px
 from datetime import datetime
 import unicodedata
 import re
+from io import BytesIO
 
 # =========================================================
 # CONFIGURAÇÃO DA PÁGINA
@@ -209,6 +210,115 @@ def carregar_dados():
     df.columns = [str(c).strip() for c in df.columns]
     return df
 
+def obter_cor_por_upm(valor_upm, texto_row=""):
+    upm = str(valor_upm).strip().upper()
+
+    if "EVENTO CANCELADO" in str(texto_row).upper():
+        return "#F8D7DA"   # vermelho claro
+
+    if "BPESC" in upm or "BPESCOLAR" in upm:
+        return "#D9EAF7"   # azul claro
+
+    if "BPRURAL" in upm or upm in ["BPR", "BPRV"]:
+        return "#DFF0D8"   # verde claro
+
+    if "BPMA" in upm:
+        return "#E6D9F2"   # roxo claro
+
+    if upm != "":
+        return "#FFF3CD"   # amarelo claro para demais UPMs
+
+    return ""
+
+def definir_cor_linha(row, coluna_upm):
+    valor_upm = row[coluna_upm] if coluna_upm in row.index else ""
+    texto_row = " ".join([str(v).strip() for v in row.fillna("").tolist()])
+
+    cor = obter_cor_por_upm(valor_upm, texto_row)
+
+    if cor:
+        estilo = f"background-color: {cor}; color: #111827; font-weight: bold;"
+        return [estilo] * len(row)
+
+    return ["color: #111827;"] * len(row)
+
+def gerar_excel_colorido(df_exportacao, coluna_upm):
+    output = BytesIO()
+
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df_exportacao.to_excel(writer, index=False, sheet_name="DADOS_2026")
+
+        worksheet = writer.sheets["DADOS_2026"]
+
+        from openpyxl.styles import PatternFill, Font, Alignment
+
+        fill_azul = PatternFill(fill_type="solid", start_color="D9EAF7", end_color="D9EAF7")
+        fill_verde = PatternFill(fill_type="solid", start_color="DFF0D8", end_color="DFF0D8")
+        fill_roxo = PatternFill(fill_type="solid", start_color="E6D9F2", end_color="E6D9F2")
+        fill_vermelho = PatternFill(fill_type="solid", start_color="F8D7DA", end_color="F8D7DA")
+        fill_amarelo = PatternFill(fill_type="solid", start_color="FFF3CD", end_color="FFF3CD")
+        fill_header = PatternFill(fill_type="solid", start_color="D9E2EC", end_color="D9E2EC")
+
+        for cell in worksheet[1]:
+            cell.font = Font(bold=True)
+            cell.fill = fill_header
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        idx_upm_excel = None
+        for idx, col_name in enumerate(df_exportacao.columns, start=1):
+            if str(col_name).strip() == str(coluna_upm).strip():
+                idx_upm_excel = idx
+                break
+
+        for row_idx in range(2, worksheet.max_row + 1):
+            valores = []
+            for col_idx in range(1, worksheet.max_column + 1):
+                valor = worksheet.cell(row=row_idx, column=col_idx).value
+                valores.append("" if valor is None else str(valor).strip())
+
+            texto_row = " ".join(valores)
+            valor_upm = ""
+
+            if idx_upm_excel is not None:
+                valor_upm = worksheet.cell(row=row_idx, column=idx_upm_excel).value
+                valor_upm = "" if valor_upm is None else str(valor_upm).strip()
+
+            cor = obter_cor_por_upm(valor_upm, texto_row)
+
+            if cor == "#D9EAF7":
+                fill = fill_azul
+            elif cor == "#DFF0D8":
+                fill = fill_verde
+            elif cor == "#E6D9F2":
+                fill = fill_roxo
+            elif cor == "#F8D7DA":
+                fill = fill_vermelho
+            elif cor == "#FFF3CD":
+                fill = fill_amarelo
+            else:
+                fill = None
+
+            if fill is not None:
+                for col_idx in range(1, worksheet.max_column + 1):
+                    cell = worksheet.cell(row=row_idx, column=col_idx)
+                    cell.fill = fill
+                    cell.font = Font(bold=True, color="111827")
+
+        for col in worksheet.columns:
+            max_length = 0
+            col_letter = col[0].column_letter
+            for cell in col:
+                try:
+                    valor = "" if cell.value is None else str(cell.value)
+                    if len(valor) > max_length:
+                        max_length = len(valor)
+                except:
+                    pass
+            worksheet.column_dimensions[col_letter].width = min(max_length + 2, 40)
+
+    output.seek(0)
+    return output.getvalue()
+
 # =========================================================
 # INÍCIO
 # =========================================================
@@ -350,7 +460,6 @@ try:
         st.warning("NENHUM REGISTRO ENCONTRADO.")
         st.stop()
 
-    # FIXAR 2026 A PARTIR DE EVENTOS POR CPR
     df_2026 = df_filtrado[df_filtrado["Ano"] == 2026].copy()
 
     if df_2026.empty:
@@ -527,7 +636,7 @@ try:
             st.plotly_chart(fig_cpr, use_container_width=True, config={"locale": "pt-BR"})
 
     # =====================================================
-    # EVENTOS POR UPM - FIXO 2026 E MESMA COR
+    # EVENTOS POR UPM - FIXO 2026
     # =====================================================
 
     if coluna_upm:
@@ -679,7 +788,7 @@ try:
         st.plotly_chart(fig, use_container_width=True, config={"locale": "pt-BR"})
 
     # =====================================================
-    # NOVO GRÁFICO - EVOLUÇÃO DA QUANTIDADE DE EVENTOS POR HORA
+    # EVOLUÇÃO DA QUANTIDADE DE EVENTOS POR HORA
     # =====================================================
 
     if df_2026["Hora"].notna().any():
@@ -715,7 +824,7 @@ try:
         st.plotly_chart(fig_eventos_hora, use_container_width=True, config={"locale": "pt-BR"})
 
     # =====================================================
-    # MAPA DE CALOR - HORÁRIO X PÚBLICO PREVISTO - FIXO 2026
+    # MAPA DE CALOR - HORÁRIO X PÚBLICO PREVISTO
     # =====================================================
 
     if coluna_publico and df_2026["DATA_INICIO_BASE"].notna().any():
@@ -761,12 +870,8 @@ try:
             heatmap_df = pd.DataFrame(registros_heatmap)
 
             if not heatmap_df.empty:
-                dias_ordem = (
-                    heatmap_df[["Dia_Semana_Num", "Dia_Semana"]]
-                    .drop_duplicates()
-                    .sort_values("Dia_Semana_Num")["Dia_Semana"]
-                    .tolist()
-                )
+                dias_ordem = DIAS_SEMANA
+                horas_ordem = list(range(24))
 
                 heatmap_resumo = (
                     heatmap_df.groupby(["Dia_Semana_Num", "Dia_Semana", "Hora"])["Valor"]
@@ -781,9 +886,11 @@ try:
                         columns="Hora",
                         values="Valor"
                     )
-                    .reindex(dias_ordem)
+                    .reindex(index=dias_ordem, columns=horas_ordem)
                     .fillna(0)
                 )
+
+                matriz.columns = [f"{int(col):02d}:00" for col in matriz.columns]
 
                 fig_heat = px.imshow(
                     matriz,
@@ -798,11 +905,18 @@ try:
                     coloraxis_colorbar_title="Público Previsto"
                 )
 
+                fig_heat.update_xaxes(
+                    tickmode="array",
+                    tickvals=list(range(len(matriz.columns))),
+                    ticktext=list(matriz.columns),
+                    side="bottom"
+                )
+
                 fig_heat = aplicar_estilo(fig_heat)
                 st.plotly_chart(fig_heat, use_container_width=True, config={"locale": "pt-BR"})
 
     # =====================================================
-    # NOVO MAPA DE CALOR - HORÁRIO X QUANTIDADE DE EVENTOS
+    # MAPA DE CALOR - HORÁRIO X QUANTIDADE DE EVENTOS
     # =====================================================
 
     if df_2026["DATA_INICIO_BASE"].notna().any():
@@ -846,12 +960,8 @@ try:
             heatmap_eventos_df = pd.DataFrame(registros_heatmap_eventos)
 
             if not heatmap_eventos_df.empty:
-                dias_ordem = (
-                    heatmap_eventos_df[["Dia_Semana_Num", "Dia_Semana"]]
-                    .drop_duplicates()
-                    .sort_values("Dia_Semana_Num")["Dia_Semana"]
-                    .tolist()
-                )
+                dias_ordem = DIAS_SEMANA
+                horas_ordem = list(range(24))
 
                 heatmap_eventos_resumo = (
                     heatmap_eventos_df.groupby(["Dia_Semana_Num", "Dia_Semana", "Hora"])["Quantidade_Eventos"]
@@ -866,9 +976,11 @@ try:
                         columns="Hora",
                         values="Quantidade_Eventos"
                     )
-                    .reindex(dias_ordem)
+                    .reindex(index=dias_ordem, columns=horas_ordem)
                     .fillna(0)
                 )
+
+                matriz_eventos.columns = [f"{int(col):02d}:00" for col in matriz_eventos.columns]
 
                 fig_heat_eventos = px.imshow(
                     matriz_eventos,
@@ -881,6 +993,13 @@ try:
                     xaxis_title="Hora do Dia",
                     yaxis_title="Dia da Semana",
                     coloraxis_colorbar_title="Qtd. Eventos"
+                )
+
+                fig_heat_eventos.update_xaxes(
+                    tickmode="array",
+                    tickvals=list(range(len(matriz_eventos.columns))),
+                    ticktext=list(matriz_eventos.columns),
+                    side="bottom"
                 )
 
                 fig_heat_eventos = aplicar_estilo(fig_heat_eventos)
@@ -1042,20 +1161,36 @@ try:
             .any(axis=1)
         ]
 
-    st.dataframe(tabela, use_container_width=True, height=450)
+    st.dataframe(
+        tabela.style.apply(lambda row: definir_cor_linha(row, coluna_upm), axis=1),
+        use_container_width=True,
+        height=450
+    )
 
     # =====================================================
     # DOWNLOAD
     # =====================================================
 
     csv = tabela.to_csv(index=False).encode("utf-8-sig")
+    excel_colorido = gerar_excel_colorido(tabela, coluna_upm)
 
-    st.download_button(
-        label="⬇️ BAIXAR CSV",
-        data=csv,
-        file_name="operacao_sao_joao_2026.csv",
-        mime="text/csv"
-    )
+    col_dl1, col_dl2 = st.columns(2)
+
+    with col_dl1:
+        st.download_button(
+            label="⬇️ BAIXAR CSV",
+            data=csv,
+            file_name="operacao_sao_joao_2026.csv",
+            mime="text/csv"
+        )
+
+    with col_dl2:
+        st.download_button(
+            label="⬇️ BAIXAR EXCEL COLORIDO",
+            data=excel_colorido,
+            file_name="operacao_sao_joao_2026_colorido.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
     st.success(f"✅ DASHBOARD ATUALIZADO EM {horario}")
 
