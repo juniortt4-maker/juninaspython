@@ -731,6 +731,57 @@ try:
             st.plotly_chart(fig_nat, use_container_width=True, config={"locale": "pt-BR"})
 
     # =====================================================
+    # TRÂNSITO - COLUNA M
+    # =====================================================
+
+    st.subheader("🚦 INFORMAÇÕES DE TRÂNSITO")
+
+    if len(df_2026.columns) > 12:
+        coluna_transito = df_2026.columns[12]
+
+        base_transito = df_2026.copy()
+
+        base_transito[coluna_transito] = (
+            base_transito[coluna_transito]
+            .astype("string")
+            .fillna("NÃO INFORMADO")
+            .str.strip()
+            .replace("", "NÃO INFORMADO")
+        )
+
+        transito_df = (
+            base_transito.groupby(coluna_transito)["_ID_LINHA_EVENTO_"]
+            .count()
+            .reset_index(name="Eventos")
+            .sort_values(by="Eventos", ascending=False)
+        )
+
+        if not transito_df.empty:
+            fig_transito = px.pie(
+                transito_df,
+                names=coluna_transito,
+                values="Eventos",
+                hole=0.45,
+                color_discrete_sequence=PALETA_PIZZA
+            )
+
+            fig_transito.update_traces(
+                textinfo="percent+label",
+                textposition="outside",
+                hovertemplate="<b>%{label}</b><br>Eventos: %{value}<br>Percentual: %{percent}<extra></extra>"
+            )
+
+            fig_transito = aplicar_estilo(fig_transito)
+
+            st.plotly_chart(
+                fig_transito,
+                use_container_width=True,
+                config={"locale": "pt-BR"}
+            )
+    else:
+        st.warning("A planilha não possui a coluna M disponível.")
+
+    # =====================================================
     # EVENTOS POR COMANDO - FIXO 2026
     # =====================================================
 
