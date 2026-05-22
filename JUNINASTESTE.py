@@ -371,8 +371,6 @@ try:
         c5.metric("EVENTOS EM JANEIRO", eventos_jan)
         c6.metric("EVENTOS EM FEVEREIRO", eventos_fev)
 
-        st.caption(f"Coluna C usada para CPR: {coluna_cpr}")
-        st.caption(f"Coluna D usada para UPM: {coluna_upm}")
         st.caption(f"Coluna J usada como início: {coluna_inicio}")
         st.caption(f"Coluna K usada como fim: {coluna_fim}")
 
@@ -459,12 +457,103 @@ try:
     total_publico = int(df_filtrado[coluna_publico].fillna(0).sum()) if coluna_publico else 0
     total_cidades = df_filtrado[coluna_cidade].dropna().nunique() if coluna_cidade else 0
     total_comandos = df_filtrado[coluna_comando].dropna().nunique() if coluna_comando else 0
+    total_cprs = df_filtrado[coluna_cpr].dropna().nunique() if coluna_cpr else 0
+    total_upms = df_filtrado[coluna_upm].dropna().nunique() if coluna_upm else 0
 
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
     c1.metric("🎉 EVENTOS", total_eventos)
     c2.metric("👥 PÚBLICO", f"{total_publico:,}".replace(",", "."))
     c3.metric("🏙️ CIDADES", total_cidades)
     c4.metric("🚔 COMANDOS", total_comandos)
+    c5.metric("🛡️ CPR", total_cprs)
+    c6.metric("🏢 UPM", total_upms)
+
+    # =====================================================
+    # EVENTOS POR CPR
+    # =====================================================
+
+    if coluna_cpr:
+        st.subheader("🛡️ EVENTOS POR CPR")
+
+        cpr_df = (
+            df_filtrado[df_filtrado[coluna_cpr].notna()]
+            .groupby(coluna_cpr)["_ID_LINHA_EVENTO_"]
+            .count()
+            .reset_index(name="Eventos")
+            .sort_values(by="Eventos", ascending=True)
+        )
+
+        if not cpr_df.empty:
+            cpr_df["categoria_cor"] = cpr_df[coluna_cpr].astype(str)
+
+            fig_cpr = px.bar(
+                cpr_df,
+                x="Eventos",
+                y=coluna_cpr,
+                orientation="h",
+                color="categoria_cor",
+                text="Eventos",
+                color_discrete_sequence=PALETA_BARRAS
+            )
+
+            fig_cpr.update_layout(
+                showlegend=False,
+                xaxis_title="Eventos",
+                yaxis_title="CPR"
+            )
+            fig_cpr.update_xaxes(tickformat=",d")
+            fig_cpr = aplicar_estilo(fig_cpr)
+            st.plotly_chart(fig_cpr, use_container_width=True)
+
+    # =====================================================
+    # EVENTOS POR UPM
+    # =====================================================
+
+    if coluna_upm:
+        st.subheader("🏢 EVENTOS POR UPM")
+
+        upm_df = (
+            df_filtrado[df_filtrado[coluna_upm].notna()]
+            .groupby(coluna_upm)["_ID_LINHA_EVENTO_"]
+            .count()
+            .reset_index(name="Eventos")
+            .sort_values(by="Eventos", ascending=True)
+        )
+
+        if not upm_df.empty:
+            upm_df["categoria_cor"] = upm_df[coluna_upm].astype(str)
+
+            altura_upm = max(500, len(upm_df) * 45)
+
+            fig_upm = px.bar(
+                upm_df,
+                x="Eventos",
+                y=coluna_upm,
+                orientation="h",
+                color="categoria_cor",
+                text="Eventos",
+                color_discrete_sequence=PALETA_BARRAS
+            )
+
+            fig_upm.update_traces(textposition="outside")
+            fig_upm = aplicar_estilo(fig_upm)
+
+            fig_upm.update_layout(
+                height=altura_upm,
+                showlegend=False,
+                xaxis_title="Eventos",
+                yaxis_title="UPM",
+                margin=dict(l=140, r=40, t=60, b=40),
+                yaxis=dict(
+                    automargin=True,
+                    tickfont=dict(size=12),
+                    categoryorder="total ascending"
+                )
+            )
+
+            fig_upm.update_xaxes(tickformat=",d")
+
+            st.plotly_chart(fig_upm, use_container_width=True)
 
     # =====================================================
     # EVENTOS POR NATUREZA
@@ -788,6 +877,12 @@ try:
 
 🚔 TOTAL DE COMANDOS:
 {total_comandos}
+
+🛡️ TOTAL DE CPR:
+{total_cprs}
+
+🏢 TOTAL DE UPM:
+{total_upms}
 """)
 
     # =====================================================
