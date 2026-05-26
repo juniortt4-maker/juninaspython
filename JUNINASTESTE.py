@@ -41,7 +41,7 @@ document.documentElement.lang = "pt-BR";
 # HEADER PROFISSIONAL REAL (SEM BUG)
 # =========================================================
 
-col1, col2 = st.columns([1, 20])
+col1, col2 = st.columns([1, 25])
 
 with col1:
     st.image("brasao.png", width=60)
@@ -52,18 +52,22 @@ with col2:
             background: linear-gradient(90deg, #0B1F3A 0%, #1E3A5F 100%);
             padding: 12px 20px;
             border-radius: 8px;
+            margin-left: -12px;
+            height: 65px;
+            display: flex;
+            align-items: center;
         ">
             <span style="
                 color: white;
                 font-size: 2rem;
                 font-weight: 800;
                 letter-spacing: 1px;
+                line-height: 1;
             ">
                 OPERAÇÃO SÃO JOÃO 2026 SUBCHEFIA DE OPERAÇÕES PMDF
             </span>
         </div>
     """, unsafe_allow_html=True)
-
 
 # =========================================================
 # LINK DA PLANILHA
