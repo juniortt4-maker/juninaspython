@@ -1453,10 +1453,35 @@ try:
             .any(axis=1)
         ]
 
-    st.dataframe(
-        tabela.style.apply(lambda row: definir_cor_linha(row, coluna_upm), axis=1),
+    # =====================================================
+    # TABELA COM CAMPO EDITÁVEL
+    # =====================================================
+
+    # cria coluna editável sem alterar a planilha original
+    if "OBSERVAÇÕES OPERACIONAIS" not in tabela.columns:
+        tabela["OBSERVAÇÕES OPERACIONAIS"] = ""
+
+    # editor da tabela
+    tabela_editavel = st.data_editor(
+        tabela,
         use_container_width=True,
-        height=450
+        height=450,
+        hide_index=True,
+        key="tabela_operacional_editavel",
+
+        # somente a coluna de observação fica editável
+        disabled=[
+            col for col in tabela.columns
+            if col != "OBSERVAÇÕES OPERACIONAIS"
+        ],
+
+        column_config={
+            "OBSERVAÇÕES OPERACIONAIS": st.column_config.TextColumn(
+                "OBSERVAÇÕES OPERACIONAIS",
+                help="Campo para inserção de informações complementares",
+                width="large"
+            )
+        }
     )
 
     # =====================================================
