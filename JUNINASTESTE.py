@@ -943,14 +943,18 @@ try:
         data_min_df = evolucao["Data"].min()
         data_max_df = evolucao["Data"].max()
 
+        # detectar se usuário filtrou período
         range_dias = (data_max_df - data_min_df).days
 
         if range_dias > 60:
-            data_final = hoje
+            # ✅ SEM FILTRO → próximos 30 dias
+            data_inicial_30d = hoje
+            data_final = hoje + pd.Timedelta(days=29)
         else:
+            # ✅ COM FILTRO → usa exatamente o intervalo do usuário
+            data_inicial_30d = data_min_df
             data_final = data_max_df
 
-        data_inicial_30d = data_final - pd.Timedelta(days=29)
 
         # ===============================
         # FILTRAR DADOS
