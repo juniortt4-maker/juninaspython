@@ -914,13 +914,13 @@ try:
             fig.update_yaxes(tickformat=",d")
             fig = aplicar_estilo(fig)
             st.plotly_chart(fig, use_container_width=True, config={"locale": "pt-BR"})
-    # =====================================================
-    # EVOLUÇÃO DE EVENTOS - FIXO 30 DIAS (VERSÃO FINAL)
-    # =====================================================
+        # =====================================================
+        # EVOLUÇÃO DE EVENTOS (REGRA FINAL CORRIGIDA)
+        # =====================================================
 
     if df_2026["DATA_EVENTO_BASE"].notna().any():
 
-        st.subheader("📈 EVOLUÇÃO DE EVENTOS (ÚLTIMOS 30 DIAS)")
+        st.subheader("📈 EVOLUÇÃO DE EVENTOS")
 
         # ===============================
         # BASE AGRUPADA (CONTAGEM)
@@ -936,25 +936,35 @@ try:
         evolucao = evolucao.sort_values("Data")
 
         # ===============================
-        # DETECÇÃO DE FILTRO
+        # REGRA DE PERÍODO (CORRIGIDA)
         # ===============================
         hoje = pd.Timestamp.today().normalize()
+
+        # 👉 fallback seguro caso df_original não exista corretamente
+        try:
+            data_min_total = df_original["DATA_EVENTO_BASE"].min()
+            data_max_total = df_original["DATA_EVENTO_BASE"].max()
+        except:
+            data_min_total = evolucao["Data"].min()
+            data_max_total = evolucao["Data"].max()
 
         data_min_df = evolucao["Data"].min()
         data_max_df = evolucao["Data"].max()
 
-        # detectar se usuário filtrou período
-        range_dias = (data_max_df - data_min_df).days
+        # ✅ DETECTA SE USUÁRIO FILTROU DATA (não natureza)
+        filtro_data_aplicado = (
+                (data_min_df > data_min_total) or
+                (data_max_df < data_max_total)
+        )
 
-        if range_dias > 60:
-            # ✅ SEM FILTRO → próximos 30 dias
-            data_inicial_30d = hoje
-            data_final = hoje + pd.Timedelta(days=29)
-        else:
-            # ✅ COM FILTRO → usa exatamente o intervalo do usuário
+        if filtro_data_aplicado:
+            # ✅ respeita o período escolhido
             data_inicial_30d = data_min_df
             data_final = data_max_df
-
+        else:
+            # ✅ sem filtro → próximos 30 dias
+            data_inicial_30d = hoje
+            data_final = hoje + pd.Timedelta(days=29)
 
         # ===============================
         # FILTRAR DADOS
@@ -994,7 +1004,6 @@ try:
             marker=dict(size=6)
         )
 
-        # eixo X (SEM RANGE SLIDER)
         fig.update_xaxes(
             tickformat="%d/%m",
             dtick="D3",
