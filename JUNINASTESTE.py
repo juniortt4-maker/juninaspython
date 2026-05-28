@@ -1458,8 +1458,8 @@ try:
     # =====================================================
 
     # cria coluna editável sem alterar a planilha original
-    if "OBSERVAÇÕES OPERACIONAIS" not in tabela.columns:
-        tabela["OBSERVAÇÕES OPERACIONAIS"] = ""
+    if "UPM DEMANDADA" not in tabela.columns:
+        tabela["UPM DEMANDADA"] = ""
 
     # editor da tabela
     tabela_editavel = st.data_editor(
