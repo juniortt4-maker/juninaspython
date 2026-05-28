@@ -915,8 +915,27 @@ try:
             fig = aplicar_estilo(fig)
             st.plotly_chart(fig, use_container_width=True, config={"locale": "pt-BR"})
         # =====================================================
-        # EVOLUÇÃO DE EVENTOS (REGRA FINAL CORRIGIDA)
+        # EVOLUÇÃO DE EVENTOS (REGRA FINAL PROFISSIONAL)
         # =====================================================
+    # =====================================================
+    # GARANTIR PADRONIZAÇÃO DA BASE
+    # =====================================================
+    df.columns = df.columns.str.strip().str.upper()
+    df["DATA_EVENTO_BASE"] = pd.to_datetime(df["DATA_EVENTO_BASE"], errors="coerce")
+
+    # =====================================================
+    # FILTRO DE PERÍODO
+    # =====================================================
+    data_inicio, data_fim = st.date_input(
+        "Período",
+        value=[
+            df["DATA_EVENTO_BASE"].min(),
+            df["DATA_EVENTO_BASE"].max()
+        ]
+    )
+    # =====================================================
+    # EVOLUÇÃO DE EVENTOS (VERSÃO DEFINITIVA)
+    # =====================================================
 
     if df_2026["DATA_EVENTO_BASE"].notna().any():
 
@@ -936,31 +955,19 @@ try:
         evolucao = evolucao.sort_values("Data")
 
         # ===============================
-        # REGRA DE PERÍODO (CORRIGIDA)
+        # REGRA DE PERÍODO (USANDO SIDEBAR)
         # ===============================
         hoje = pd.Timestamp.today().normalize()
 
-        # 👉 fallback seguro caso df_original não exista corretamente
-        try:
-            data_min_total = df_original["DATA_EVENTO_BASE"].min()
-            data_max_total = df_original["DATA_EVENTO_BASE"].max()
-        except:
-            data_min_total = evolucao["Data"].min()
-            data_max_total = evolucao["Data"].max()
+        # ✅ usa o filtro do sidebar
+        if isinstance(intervalo, (tuple, list)) and len(intervalo) == 2:
 
-        data_min_df = evolucao["Data"].min()
-        data_max_df = evolucao["Data"].max()
+            data_inicio_input = pd.to_datetime(intervalo[0])
+            data_fim_input = pd.to_datetime(intervalo[1])
 
-        # ✅ DETECTA SE USUÁRIO FILTROU DATA (não natureza)
-        filtro_data_aplicado = (
-                (data_min_df > data_min_total) or
-                (data_max_df < data_max_total)
-        )
+            data_inicial_30d = data_inicio_input
+            data_final = data_fim_input
 
-        if filtro_data_aplicado:
-            # ✅ respeita o período escolhido
-            data_inicial_30d = data_min_df
-            data_final = data_max_df
         else:
             # ✅ sem filtro → próximos 30 dias
             data_inicial_30d = hoje
@@ -982,12 +989,6 @@ try:
         })
 
         evolucao = calendario.merge(evolucao, on="Data", how="left").fillna(0)
-        evolucao = evolucao.sort_values("Data")
-
-        # suavização
-        evolucao["Quantidade_smooth"] = (
-            evolucao["Quantidade"].rolling(3, min_periods=1).mean()
-        )
 
         # ===============================
         # GRÁFICO
@@ -1007,8 +1008,7 @@ try:
         fig.update_xaxes(
             tickformat="%d/%m",
             dtick="D3",
-            tickangle=30,
-            tickfont=dict(size=11)
+            tickangle=30
         )
 
         fig.update_yaxes(tickformat=",d")
@@ -1033,6 +1033,7 @@ try:
             use_container_width=True,
             config={"locale": "pt-BR"}
         )
+
     # =====================================================
     # EVOLUÇÃO DA QUANTIDADE DE EVENTOS POR HORA
     # =====================================================
