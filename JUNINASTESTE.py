@@ -1437,82 +1437,99 @@ try:
     else:
         st.warning("A planilha não possui a coluna M disponível.")
 
-    # =====================================================
-    # TABELA FINAL - FIXO 2026
+
+# =====================================================
+    # TABELA FINAL - EDITÁVEL (VERSÃO ESTÁVEL)
     # =====================================================
 
     st.subheader("📄 DADOS OPERACIONAIS")
 
-    pesquisa = st.text_input("🔎 PESQUISAR NA TABELA")
-    tabela = df_2026.copy()
+    # ✅ input único
+    pesquisa = st.text_input(
+        "🔎 PESQUISAR NA TABELA",
+        key="pesquisa_tabela_operacional"
+    )
 
+    tabela_base = df_2026.copy()
+
+    # ✅ filtro
     if pesquisa:
-        tabela = tabela[
-            tabela.astype(str)
+        tabela_base = tabela_base[
+            tabela_base.astype(str)
             .apply(lambda x: x.str.contains(pesquisa, case=False, na=False))
             .any(axis=1)
         ]
 
+    # ✅ garante coluna
+    if "UPM DEMANDADA" not in tabela_base.columns:
+        tabela_base["UPM DEMANDADA"] = ""
+
     # =====================================================
-    # TABELA COM CAMPO EDITÁVEL
+    # MEMÓRIA (SESSION STATE)
     # =====================================================
 
-    # cria coluna editável sem alterar a planilha original
-    if "UPM DEMANDADA" not in tabela.columns:
-        tabela["UPM DEMANDADA"] = ""
+    if "memoria_upm" not in st.session_state:
+        st.session_state["memoria_upm"] = {}
 
-    # editor da tabela
+    # aplica memória nas linhas
+    def aplicar_memoria(row):
+        id_linha = row["_ID_LINHA_EVENTO_"]
+        if id_linha in st.session_state["memoria_upm"]:
+            return st.session_state["memoria_upm"][id_linha]
+        return row["UPM DEMANDADA"]
+
+    tabela_base["UPM DEMANDADA"] = tabela_base.apply(aplicar_memoria, axis=1)
+
+    # =====================================================
+    # EDITOR
+    # =====================================================
+
     tabela_editavel = st.data_editor(
-        tabela,
+        tabela_base,
         use_container_width=True,
         height=450,
         hide_index=True,
-        key="tabela_operacional_editavel",
+        key="editor_operacional",
 
-        # somente a coluna de observação fica editável
         disabled=[
-            col for col in tabela.columns
+            col for col in tabela_base.columns
             if col != "UPM DEMANDADA"
         ],
 
         column_config={
             "UPM DEMANDADA": st.column_config.TextColumn(
                 "UPM DEMANDADA",
-                help="Campo para inserção de informações complementares",
+                help="Campo editável",
                 width="large"
             )
         }
     )
 
     # =====================================================
+    # SALVAR NA MEMÓRIA
+    # =====================================================
+
+    for _, row in tabela_editavel.iterrows():
+        st.session_state["memoria_upm"][row["_ID_LINHA_EVENTO_"]] = row["UPM DEMANDADA"]
+
+    # =====================================================
     # DOWNLOAD
     # =====================================================
 
-    csv = tabela.to_csv(index=False).encode("utf-8-sig")
+    csv = tabela_editavel.to_csv(index=False).encode("utf-8-sig")
 
-    col_dl1, col_dl2 = st.columns(2)
-
-    with col_dl1:
-        st.download_button(
-            label="⬇️ BAIXAR CSV",
-            data=csv,
-            file_name="operacao_sao_joao_2026.csv",
-            mime="text/csv"
-        )
-
-    with col_dl2:
-        if OPENPYXL_DISPONIVEL:
-            excel_colorido = gerar_excel_colorido(tabela, coluna_upm)
-            st.download_button(
-                label="⬇️ BAIXAR EXCEL COLORIDO",
-                data=excel_colorido,
-                file_name="operacao_sao_joao_2026_colorido.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-        else:
-            st.warning("Download em Excel colorido desativado: openpyxl não instalado.")
+    st.download_button(
+        label="⬇️ BAIXAR CSV",
+        data=csv,
+        file_name="operacao_sao_joao_2026.csv",
+        mime="text/csv"
+    )
 
     st.success(f"✅ DASHBOARD ATUALIZADO EM {horario}")
+
+# =====================================================
+# EXCEPT (OBRIGATÓRIO — NÃO MEXER)
+# =====================================================
 
 except Exception as erro:
     st.error(f"ERRO AO CARREGAR DADOS: {str(erro)}")
